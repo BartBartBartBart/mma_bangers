@@ -4,6 +4,9 @@ Repository for the Multimedia Analytics assignment.
 ## Basic Setup
 To develop on your machine, here are some tips.
 
+First, please download the data from [here](https://www.kaggle.com/datasets/stackoverflow/stacksample).
+Put it in a directory `data` in the repository.
+
 create the conda environment and activate it:
    ```bash
    conda env create -f environment.yaml
@@ -36,3 +39,10 @@ Then:
     ```
 
     where `${CUDA}` should be replaced by either `cpu`, `cu102`, `cu113`, or `cu115` depending on your PyTorch installation (`torch.version.cuda`).
+
+## Run interactive app
+When you have installed the data and activated the environment you can run the app by executing:
+
+```bash
+python app.py
+```
