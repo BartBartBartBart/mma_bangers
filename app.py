@@ -28,6 +28,21 @@ tags_per_user_hm = create_heatmap(
 print("DONE REFRESHING")
 
 heatmap_versions = [tags_per_user_hm]
+# # try this
+# temporal_heatmap = heatmap_versions[0] - heatmap_versions[1]
+# # if this doesnt work, we can save the dataframes in addition or instead of the heatmaps themselves
+# # and then recreate the heatmaps when needed
+# # so like this (be sure to change it in the callback as well):
+# heatmap_versions = [tags_per_user_df]
+# # and then to make the heatmap:
+# temporal_df = heatmap_versions[0] - heatmap_versions[1]
+# temporal_heatmap = create_heatmap(
+#     temporal_df,
+#     title='Tags per user',
+#     xaxis='Tags',
+#     yaxis='Users'
+# )
+# # then put this temporal heatmap in dcc.graph
 
 # Initialize the app
 app = Dash()
@@ -110,7 +125,7 @@ app.layout = dbc.Container(
                 ),
                 dbc.Col(
                     dbc.Container(
-                        "Click on a cell to show a sample question",
+                        children="Click on a cell to show a sample question",
                         id='show-question',
                         fluid=True, className='question'
                     ),
@@ -118,7 +133,20 @@ app.layout = dbc.Container(
                 ),
             ],
             fluid=True, className='main-container'
-        )
+        ),
+        dbc.Container(
+            [
+                html.P("Temporal Matrix"),
+                dbc.Container(
+                    dbc.Container(
+                        dcc.Graph(figure=tags_per_user_hm, id='temporal-matrix'),
+                        fluid=True, className='heatmap'
+                    ),
+                    fluid=True, className='heatmap-container'
+                )
+            ],
+            fluid=True, className='graph-toolbar-container'
+        ),
     ], 
     fluid=True, className='top-level-container'
 )

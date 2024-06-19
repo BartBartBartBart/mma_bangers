@@ -112,3 +112,17 @@ p {
     margin-top: 30px;
     margin-bottom: 30px;
 }
+
+/* align the heatmap to main-container */
+.temporal-heatmap-container {
+    display: flex;
+    flex-direction: column;
+    width: 80%;
+    height: 80%;
+    margin-left: 30px;
+    margin-right: auto;
+    align-self: left;
+    justify-content: space-between;
+    margin-top: 30px;
+    margin-bottom: 30px;
+}
