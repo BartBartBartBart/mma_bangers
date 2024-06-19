@@ -28,6 +28,7 @@ p {
     margin-left: 30px;
     margin-right: auto;
     justify-content: space-between;
+    background-color: #dfe9f0;
     /* margin-top: 0px;
     margin-bottom: 0px; */
     border: 1px solid #cccccc;
@@ -42,6 +43,7 @@ p {
     margin-right: auto;
     align-self: left;
     justify-content: space-between;
+    /* background-color: #dfe9f0; */
     margin-top: 30px;
     margin-bottom: 30px;
     border: 1px solid #cccccc;
@@ -71,15 +73,26 @@ p {
 .question-container {
     display: flex;
     width: 12%;
-    height: 80%;
+    height: 940px; /* Set a predefined height */
     margin-left: auto;
     margin-right: 30px;
     align-self: right;
     justify-content: space-between;
+    background-color: #dfe9f0;
     margin-top: 30px;
     margin-bottom: 30px;
     border: 1px solid #cccccc;
     border-radius: 10px;
+    overflow: hidden; /* Add this to prevent overflow */
+}
+
+.question {
+    margin-left: 10px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    height: 100%; /* Set height to 100% to fill the container */
+    width: 100%; /* Set width to 100% to fill the container */
+    overflow: auto; /* Add this to make it scrollable */
 }
 
 .main-container {

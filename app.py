@@ -27,6 +27,8 @@ tags_per_user_hm = create_heatmap(
 
 print("DONE REFRESHING")
 
+heatmap_versions = [tags_per_user_hm]
+
 # Initialize the app
 app = Dash()
 
@@ -63,7 +65,8 @@ app.layout = dbc.Container(
                                         ),
                                         dbc.Col(
                                             dbc.Col(
-                                                html.Div(id="edit-cell"),
+                                                html.Div("Click on a cell to edit.", 
+                                                         id="edit-cell"),
                                                 width=6,
                                                 className='edit-cell'
                                             ),
@@ -73,10 +76,15 @@ app.layout = dbc.Container(
                                     fluid=True, className='cell-input-container'
                                 ),
                                 dbc.Container(
+                                    html.P("Currect version: Version 1",
+                                            id='current-version'),
+                                    fluid=True, className='current-version'
+                                ),
+                                dbc.Container(
                                     [
                                         html.Label('Select version:'),
                                         dcc.Dropdown(
-                                            ["Version 1", "Version 2"], 
+                                            ["Version 1"], 
                                             id='version', 
                                             style={
                                                 'width': '100%',
@@ -101,38 +109,16 @@ app.layout = dbc.Container(
                     fluid=True, className='graph-toolbar-container'
                 ),
                 dbc.Col(
-                    html.Div(
+                    dbc.Container(
+                        "Click on a cell to show a sample question",
                         id='show-question',
-                        children='Click on a cell to show a sample question',
-                        # style={
-                        #     'white-space': 'pre-wrap',
-                        #     'width': '50%'
-                        # }
+                        fluid=True, className='question'
                     ),
                     className='question-container'
                 ),
             ],
             fluid=True, className='main-container'
         )
-        # html.Div(
-        #     [
-        #         dcc.Input(
-        #             id="input-number",
-        #             type=_,
-        #             placeholder=f"Input number",
-        #             debounce=True,
-        #         ) for _ in ALLOWED_TYPES
-        #     ]
-        # ),
-        # html.Div(children='', id="edit-cell"),
-        # html.Div(
-        #     id='show-question',
-        #     children='Click on a cell to show a sample question',
-        #     style={
-        #         'white-space': 'pre-wrap',
-        #         'width': '50%'
-        #     }
-        # )
     ], 
     fluid=True, className='top-level-container'
 )
@@ -154,7 +140,7 @@ def show_sample_question(clickData, q_df=q_df, a_df=a_df):
         tag_questions = user_questions[user_questions['tag'].apply(lambda x: tag in x)]
         
     if tag_questions.empty:
-        return 'No questions found for this user'
+        return 'No questions found for this user. Click on on another cell to show a sample question.'
     
     # question = tag_questions.sample(1)
     question_text = tag_questions['Body'].values[0]
@@ -168,21 +154,18 @@ def show_sample_question(clickData, q_df=q_df, a_df=a_df):
 @app.callback(
     Output("edit-cell", "children"),
     Output("input-number", "value"),
-    Output('tags-per-user', 'figure'),
+    Output('tags-per-user', 'figure', allow_duplicate=True),
+    Output('version', 'options'),
+    Output('current-version', 'children', allow_duplicate=True),
     Input('tags-per-user', 'clickData'),
     Input("input-number", "value"),
+    prevent_initial_call=True
 )
 def edit_cell(clickData, input_number, tags_per_user_df=tags_per_user_df):
-    if clickData is None:
-        tags_per_user_hm = create_heatmap(
-            tags_per_user_df,
-            title='Tags per user',
-            xaxis='Tags',
-            yaxis='Users'
-        )
-        # value = tags_per_user_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
-        return ["Click on a cell to edit", '', tags_per_user_hm]
-    elif input_number is None or input_number == '':
+    # TODO: normalize df? 
+    # TODO: preview changes before saving
+    # TODO: save changes button instead? 
+    if input_number is None or input_number == '':
         tags_per_user_hm = create_heatmap(
             tags_per_user_df,
             title='Tags per user',
@@ -192,7 +175,11 @@ def edit_cell(clickData, input_number, tags_per_user_df=tags_per_user_df):
         current_val = tags_per_user_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
         return [html.Div(f"Clicked on cell: ({clickData['points'][0]['x']}, {clickData['points'][0]['y']}), current value: {current_val}"), 
                 '', 
-                tags_per_user_hm]
+                tags_per_user_hm,
+                [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))],
+                'Current version: Version 1'
+        ]
+
     # update heatmap with new value
     tags_per_user_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']] = input_number
     # tags_per_user_df = normalize_df(tags_per_user_df)
@@ -202,11 +189,34 @@ def edit_cell(clickData, input_number, tags_per_user_df=tags_per_user_df):
         xaxis='Tags',
         yaxis='Users'
     )
+
+    heatmap_versions.append(tags_per_user_hm)
+
     return [
         html.Div(f"Editing cell ({clickData['points'][0]['x']}, {clickData['points'][0]['y']}), new value: {input_number}"),
         '',
-        tags_per_user_hm
+        tags_per_user_hm,
+        [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))],
+         f"Current version: Version {len(heatmap_versions)}"
     ]
+
+# add callback to update the heatmap with the selected version
+@app.callback(
+    Output('tags-per-user', 'figure'),
+    Output('current-version', 'children'),
+    Input('version', 'value')
+)
+def update_heatmap(version):
+    if version is None:
+        return [
+            heatmap_versions[-1],
+            f"Current version: Version {len(heatmap_versions)}"
+        ]
+    return [
+        heatmap_versions[int(version.split(' ')[1])-1],
+        f"Current version: {version}"
+    ]
+
 
 if __name__ == '__main__':
     app.run(debug=True)
