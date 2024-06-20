@@ -102,7 +102,7 @@ def tags_per_user(tag_df, q_df, a_df):
     return pd.DataFrame(tags_per_user).T 
 
 
-def create_heatmap(matrix, title, xaxis, yaxis, colourscale='Blues'):
+def create_heatmap(matrix, title, xaxis, yaxis, colourscale='Blues', zmid=None):
     # Create the heatmap
     heatmap = go.Heatmap(
         x=matrix.columns,
@@ -113,6 +113,9 @@ def create_heatmap(matrix, title, xaxis, yaxis, colourscale='Blues'):
     # heatmap.colorscale = 'RdYlGn'
     # change colour scale to white to blue
     heatmap.colorscale = colourscale
+
+    if zmid is not None:
+        heatmap.zmid = zmid
 
     # Create the layout
     layout = go.Layout(

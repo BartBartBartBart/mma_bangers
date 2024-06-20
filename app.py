@@ -29,6 +29,16 @@ print("DONE REFRESHING")
 
 heatmap_versions = [tags_per_user_df.copy()]
 
+# create temporal matrix initialised with zeros
+temporal_matrix = pd.DataFrame(0, index=tags_per_user_df.index, columns=tags_per_user_df.columns)
+temporal_hm = create_heatmap(
+    temporal_matrix,
+    title='Temporal Tags per user',
+    xaxis='Tags',
+    yaxis='Users',
+    colourscale=[[0, "red"], [0.5, "white"], [1, "green"]]
+)
+
 # Initialize the app
 app = Dash()
 
@@ -121,10 +131,40 @@ app.layout = dbc.Container(
         ),
         dbc.Container(
             [
-                html.P("Temporal Matrix"),
+                dbc.Container(
+                    [
+                        html.P("Choose two versions to compare"),
+                        dbc.Container(
+                            [
+                                html.Label('From:'),
+                                dcc.Dropdown(
+                                    ["Version 1"], 
+                                    id='compare-version-1', 
+                                    style={
+                                        'width': '100%',
+                                        'display': 'block',
+                                    }
+                                ),
+                                # html.P("versus"),
+                                html.Label('To:'),
+                                dcc.Dropdown(
+                                    ["Version 1"], 
+                                    id='compare-version-2', 
+                                    style={
+                                        'width': '100%',
+                                        'display': 'block',
+                                    }
+                                )
+                            ],
+                            fluid=True,
+                            className='compare-version-dropdown'
+                        )
+                    ],     
+                    className='temporal-toolbar', fluid=True
+                ),
                 dbc.Container(
                     dbc.Container(
-                        dcc.Graph(figure=go.Figure(), id='temporal-matrix'),
+                        dcc.Graph(figure=temporal_hm, id='temporal-matrix'),
                         fluid=True, className='heatmap'
                     ),
                     fluid=True, className='heatmap-container'
@@ -170,6 +210,8 @@ def show_sample_question(clickData, q_df=q_df, a_df=a_df):
     Output('tags-per-user', 'figure', allow_duplicate=True),
     Output('version', 'options', allow_duplicate=True),
     Output('current-version', 'children', allow_duplicate=True),
+    Output('compare-version-1', 'options', allow_duplicate=True),
+    Output('compare-version-2', 'options', allow_duplicate=True),
     Input('tags-per-user', 'clickData'),
     Input("input-number", "value"),
     prevent_initial_call=True
@@ -178,6 +220,22 @@ def edit_cell(clickData, input_number, tags_per_user_df=tags_per_user_df):
     # TODO: normalize df? 
     # TODO: preview changes before saving
     # TODO: save changes button instead? 
+    if clickData is None:
+        tags_per_user_hm = create_heatmap(
+            tags_per_user_df,
+            title='Tags per user',
+            xaxis='Tags',
+            yaxis='Users'
+        )
+        return [
+            'Click on a cell to edit.', 
+            '',
+            tags_per_user_hm,
+            [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))],
+            'Current version: Version 1',
+            [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))],
+            [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))]
+        ]
     if input_number is None or input_number == '':
         tags_per_user_hm = create_heatmap(
             tags_per_user_df,
@@ -186,11 +244,14 @@ def edit_cell(clickData, input_number, tags_per_user_df=tags_per_user_df):
             yaxis='Users'
         )
         current_val = tags_per_user_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
-        return [html.Div(f"Clicked on cell: ({clickData['points'][0]['x']}, {clickData['points'][0]['y']}), current value: {current_val}"), 
-                '', 
-                tags_per_user_hm,
-                [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))],
-                'Current version: Version 1'
+        return [
+            html.Div(f"Clicked on cell: ({clickData['points'][0]['x']}, {clickData['points'][0]['y']}), current value: {current_val}"), 
+            '', 
+            tags_per_user_hm,
+            [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))],
+            'Current version: Version 1',
+            [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))],
+            [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))]
         ]
 
     # update heatmap with new value
@@ -210,14 +271,16 @@ def edit_cell(clickData, input_number, tags_per_user_df=tags_per_user_df):
         '',
         tags_per_user_hm,
         [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))],
-         f"Current version: Version {len(heatmap_versions)}"
+        f"Current version: Version {len(heatmap_versions)}",
+        [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))],
+        [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))]
     ]
 
 # add callback to update the heatmap with the selected version
 @app.callback(
     Output('tags-per-user', 'figure'),
     Output('current-version', 'children'),
-    Output('temporal-matrix', 'figure', allow_duplicate=True),
+    # Output('temporal-matrix', 'figure', allow_duplicate=True),
     Input('version', 'value'),
     prevent_initial_call=True
 )
@@ -235,26 +298,62 @@ def update_heatmap(version):
         yaxis='Users'
     )
     
-    if version_index > 0:
-        previous_df = heatmap_versions[version_index - 1]
-        temporal_df = selected_df - previous_df
-    else:
-        # If it's the first version, compare with an empty DataFrame with the same shape
-        temporal_df = selected_df - pd.DataFrame(0, index=selected_df.index, columns=selected_df.columns)
+    # if version_index > 0:
+    #     previous_df = heatmap_versions[version_index - 1]
+    #     temporal_df = selected_df - previous_df
+    # else:
+    #     # If it's the first version, compare with an empty DataFrame with the same shape
+    #     temporal_df = selected_df - pd.DataFrame(0, index=selected_df.index, columns=selected_df.columns)
     
-    temporal_heatmap = create_heatmap(
-        temporal_df,
-        title='Temporal Tags per user',
-        xaxis='Tags',
-        yaxis='Users',
-        colourscale='RdYlGn'
-    )
+    # temporal_heatmap = create_heatmap(
+    #     temporal_df,
+    #     title='Temporal Tags per user',
+    #     xaxis='Tags',
+    #     yaxis='Users',
+    #     colourscale='RdYlGn'
+    # )
     
     return [
         tags_per_user_hm,
         f"Current version: Version {version_index + 1}",
-        temporal_heatmap
+        # temporal_heatmap
     ]
+
+# add callback to compare two versions
+@app.callback(
+    Output('temporal-matrix', 'figure'),
+    Input('compare-version-1', 'value'),
+    Input('compare-version-2', 'value'),
+    prevent_initial_call=True
+)
+def compare_versions(version1, version2):
+    if version1 is None:
+        version1_index = len(heatmap_versions) - 1
+    else:
+        version1_index = int(version1.split(' ')[1]) - 1
+    
+    if version2 is None:
+        version2_index = len(heatmap_versions) - 1
+    else:
+        version2_index = int(version2.split(' ')[1]) - 1
+    
+    df1 = heatmap_versions[version1_index]
+    df2 = heatmap_versions[version2_index]
+    
+    diff_df = df2 - df1
+
+    colorscale = [[0, "red"], [0.5, "white"], [1, "green"]]
+    
+    diff_heatmap = create_heatmap(
+        diff_df,
+        title='Difference between versions',
+        xaxis='Tags',
+        yaxis='Users',
+        colourscale=colorscale,
+        zmid=0
+    )
+    
+    return diff_heatmap
 
 
 if __name__ == '__main__':
