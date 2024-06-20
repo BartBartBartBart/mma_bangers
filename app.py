@@ -28,21 +28,6 @@ tags_per_user_hm = create_heatmap(
 print("DONE REFRESHING")
 
 heatmap_versions = [tags_per_user_df.copy()]
-# # try this
-# temporal_heatmap = heatmap_versions[0] - heatmap_versions[1]
-# # if this doesnt work, we can save the dataframes in addition or instead of the heatmaps themselves
-# # and then recreate the heatmaps when needed
-# # so like this (be sure to change it in the callback as well):
-# heatmap_versions = [tags_per_user_df]
-# # and then to make the heatmap:
-# temporal_df = heatmap_versions[0] - heatmap_versions[1]
-# temporal_heatmap = create_heatmap(
-#     temporal_df,
-#     title='Tags per user',
-#     xaxis='Tags',
-#     yaxis='Users'
-# )
-# # then put this temporal heatmap in dcc.graph
 
 # Initialize the app
 app = Dash()
@@ -261,7 +246,8 @@ def update_heatmap(version):
         temporal_df,
         title='Temporal Tags per user',
         xaxis='Tags',
-        yaxis='Users'
+        yaxis='Users',
+        colourscale='RdYlGn'
     )
     
     return [
