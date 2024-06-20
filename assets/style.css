@@ -148,3 +148,17 @@ p {
     border: 1px solid #cccccc;
     border-radius: 10px;
 }
+
+.modal-content {
+    z-index: 1050; 
+    background-color: white; 
+    color: black; 
+}
+
+.modal-backdrop {
+    z-index: 1040; 
+}
+
+.modal-dialog {
+    margin: 10% auto; 
+}
