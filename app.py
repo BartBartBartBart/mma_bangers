@@ -1,4 +1,5 @@
 import pandas as pd 
+import dash
 from dash import Dash, html, dash_table, dcc, callback, Output, Input, State
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
@@ -13,11 +14,19 @@ q_df = pd.read_csv('data/Questions.csv', encoding='latin-1', nrows=nrows)
 tags = pd.read_csv('data/Tags.csv', encoding='latin-1', nrows=nrows)
 
 tag_df = create_tags(tags, q_df)
-# tag_matrix = tag_cooccurrence(tag_df)
-# tag_heatmap = create_heatmap(tag_matrix)
+
+# We save the version in heatmap_version, which contains non-normalized dataframes
+# We save current non-saved changes in pending_changes_df
+# This is a list, where the first item is non-normalized df
+# The second item is the normalized df
+# heatmap_versions -> [non-normalized df version 1, non-normalized df version 2, ...]
+# pending changes -> [current non-normalized df, current normalized df]
 
 tags_per_user_df = tags_per_user(tag_df, q_df, a_df)
+heatmap_versions = [tags_per_user_df.copy()]
+pending_changes = [tags_per_user_df.copy()]
 tags_per_user_df = normalize_df(tags_per_user_df)
+pending_changes.append(tags_per_user_df.copy())
 
 tags_per_user_hm = create_heatmap(
     tags_per_user_df,
@@ -29,9 +38,6 @@ tags_per_user_hm = create_heatmap(
 print("DONE REFRESHING")
 
 edited_cells = []
-heatmap_versions = [tags_per_user_df.copy()]
-tags_per_user_df = normalize_df(tags_per_user_df)
-pending_changes_df = tags_per_user_df.copy()
 
 # create temporal matrix initialised with zeros
 temporal_matrix = pd.DataFrame(0, index=tags_per_user_df.index, columns=tags_per_user_df.columns)
@@ -67,6 +73,7 @@ app.layout = dbc.Container(
                                 html.P("Toolbar"),
                                 dbc.Container(
                                     [
+                                        html.Label('Input number to add changes:'),
                                         dbc.Col(
                                             dcc.Input(
                                                 id="input-number",
@@ -74,7 +81,7 @@ app.layout = dbc.Container(
                                                 placeholder="Input number",
                                                 debounce=True,
                                                 min = 0,
-                                                max = 1,
+                                                # max = 1,
                                                 step=0.1
                                             ),
                                             width=6,
@@ -93,9 +100,30 @@ app.layout = dbc.Container(
                                     fluid=True, className='cell-input-container'
                                 ),
                                 dbc.Container(
-                                    html.Button("Preview Changes", id="preview-changes", n_clicks=0),
-                                    className='cell-input'
+                                    [
+                                        html.Label('Input number to preview changes:'),
+                                        dbc.Col(
+                                            dcc.Input(
+                                                id="preview-number",
+                                                type="number",
+                                                placeholder="Input number",
+                                                debounce=True,
+                                                min = 0,
+                                                # max = 1,
+                                                step=0.1
+                                            ),
+                                            width=6,
+                                            className='cell-input'
+                                        ),
+                                        dbc.Container(
+                                            html.Button("Preview Changes", id="preview-changes", n_clicks=0),
+                                            className='cell-input'
+                                        ),
+                                    ], 
+                                    fluid=True, className='cell-input-container'
                                 ),
+                                dcc.Store(id='preview-counter', data=0),
+                                dcc.Store(id='close-preview-counter', data=0),
                                 dbc.Container(
                                     html.Button("Save Changes", id="save-changes", n_clicks=0),
                                     className='cell-input'
@@ -207,6 +235,8 @@ app.layout = dbc.Container(
     Input('tags-per-user', 'clickData')
 )
 def show_sample_question(clickData, q_df=q_df, a_df=a_df):
+    # TODO add sampling 
+
     if clickData is None:
         return 'Click on a cell to show a sample question'
     userid = clickData['points'][0]['y']
@@ -234,25 +264,16 @@ def show_sample_question(clickData, q_df=q_df, a_df=a_df):
     Output("edit-cell", "children"),
     Output("input-number", "value"),
     Output('tags-per-user', 'figure', allow_duplicate=True),
-    Output('version', 'options', allow_duplicate=True),
-    Output('current-version', 'children', allow_duplicate=True),
-    Output('compare-version-1', 'options', allow_duplicate=True),
-    Output('compare-version-2', 'options', allow_duplicate=True),
     Input('tags-per-user', 'clickData'),
     Input("input-number", "value"),
     prevent_initial_call=True
 )
-def edit_cell(clickData, input_number, tags_per_user_df=tags_per_user_df):
-    # TODO: normalize df? 
-    # TODO: preview changes before saving
-    # TODO: save changes button instead? 
-    
-    global pending_changes_df, edited_cells
-    current_val = pending_changes_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
+def edit_cell(clickData, input_number):    
+    global pending_changes, edited_cells
 
     if clickData is None:
         tags_per_user_hm = create_heatmap(
-            pending_changes_df,
+            pending_changes[1], # latest normalized df
             title='Tags per user',
             xaxis='Tags',
             yaxis='Users'
@@ -260,15 +281,12 @@ def edit_cell(clickData, input_number, tags_per_user_df=tags_per_user_df):
         return [
             'Click on a cell to edit.', 
             '',
-            tags_per_user_hm,
-            [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))],
-            'Current version: Version 1',
-            [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))],
-            [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))]
+            tags_per_user_hm
         ]
+    current_val = pending_changes[0].loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
     if input_number is None or input_number == '':
         tags_per_user_hm = create_heatmap(
-            pending_changes_df,
+            pending_changes[1], # latest normalized df
             title='Tags per user',
             xaxis='Tags',
             yaxis='Users'
@@ -276,22 +294,20 @@ def edit_cell(clickData, input_number, tags_per_user_df=tags_per_user_df):
         return [
             html.Div(f"Clicked on cell: ({clickData['points'][0]['x']}, {clickData['points'][0]['y']}), current value: {current_val}"), 
             '', 
-            tags_per_user_hm,
-            [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))],
-            'Current version: Version 1',
-            [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))],
-            [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))]
+            tags_per_user_hm
         ]
 
     # update heatmap with new value
-    pending_changes_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']] = input_number
-    pending_changes_df = normalize_df(pending_changes_df)
+    updated_heatmap = pending_changes[0].copy()
+    updated_heatmap.loc[clickData['points'][0]['y'], clickData['points'][0]['x']] = input_number
+    pending_changes[0] = updated_heatmap
+    pending_changes[1] = normalize_df(updated_heatmap)
 
     # track edited cells
     edited_cells.append((clickData['points'][0]['x'], clickData['points'][0]['y'], current_val, input_number))
 
     tags_per_user_hm = create_heatmap(
-        pending_changes_df,
+        pending_changes[1], # latest normalized df
         title='Tags per user',
         xaxis='Tags',
         yaxis='Users'
@@ -300,18 +316,12 @@ def edit_cell(clickData, input_number, tags_per_user_df=tags_per_user_df):
     return [
         html.Div(f"Editing cell ({clickData['points'][0]['x']}, {clickData['points'][0]['y']}), new value: {input_number}"),
         '',
-        tags_per_user_hm,
-        [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))],
-        f"Current version: Version {len(heatmap_versions)}",
-        [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))],
-        [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))]
+        tags_per_user_hm
     ]
 
-# add callback to update the heatmap with the selected version
 @app.callback(
     Output('tags-per-user', 'figure'),
     Output('current-version', 'children'),
-    # Output('temporal-matrix', 'figure', allow_duplicate=True),
     Input('version', 'value'),
     prevent_initial_call=True
 )
@@ -322,6 +332,7 @@ def update_heatmap(version):
         version_index = int(version.split(' ')[1]) - 1
     
     selected_df = heatmap_versions[version_index]
+    selected_df = normalize_df(selected_df)
     tags_per_user_hm = create_heatmap(
         selected_df,
         title='Tags per user',
@@ -329,28 +340,12 @@ def update_heatmap(version):
         yaxis='Users'
     )
     
-    # if version_index > 0:
-    #     previous_df = heatmap_versions[version_index - 1]
-    #     temporal_df = selected_df - previous_df
-    # else:
-    #     # If it's the first version, compare with an empty DataFrame with the same shape
-    #     temporal_df = selected_df - pd.DataFrame(0, index=selected_df.index, columns=selected_df.columns)
-    
-    # temporal_heatmap = create_heatmap(
-    #     temporal_df,
-    #     title='Temporal Tags per user',
-    #     xaxis='Tags',
-    #     yaxis='Users',
-    #     colourscale='RdYlGn'
-    # )
-    
     return [
         tags_per_user_hm,
         f"Current version: Version {version_index + 1}",
         # temporal_heatmap
     ]
 
-# add callback to compare two versions
 @app.callback(
     Output('temporal-matrix', 'figure'),
     Input('compare-version-1', 'value'),
@@ -369,9 +364,11 @@ def compare_versions(version1, version2):
         version2_index = int(version2.split(' ')[1]) - 1
     
     df1 = heatmap_versions[version1_index]
+    df1 = normalize_df(df1)
     df2 = heatmap_versions[version2_index]
+    df2 = normalize_df(df2)
     
-    diff_df = normalize_df(df2 - df1)
+    diff_df = df2 - df1
 
     colorscale = [[0, "red"], [0.5, "white"], [1, "green"]]
     
@@ -389,23 +386,44 @@ def compare_versions(version1, version2):
 @app.callback(
     Output("preview-modal", "is_open"),
     Output("preview-content", "children"),
+    Output('preview-counter', 'data'),
+    Output('close-preview-counter', 'data'),
     Input("preview-changes", "n_clicks"),
     Input("close-preview", "n_clicks"),
-    State("preview-modal", "is_open"),
+    Input('tags-per-user', 'clickData'),
+    Input("preview-number", "value"),
+    Input("preview-counter", "data"),
+    Input("close-preview-counter", "data"),
     prevent_initial_call=True
 )
-def preview_changes(n_clicks_preview, n_clicks_close, is_open):
-    global edited_cells
+def preview_changes(n_clicks_preview, n_clicks_close, clickData, preview_number, preview_counter, close_preview_counter):
+    # global edited_cells
 
-    if n_clicks_preview > 0:
-        if not edited_cells:
+    current_change = []
+    if clickData is not None and preview_number is not None and n_clicks_preview > 0:
+        preview_df = pending_changes[0].copy()
+        current_val = preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
+        preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']] = preview_number
+        preview_df = normalize_df(preview_df)
+        new_val = preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
+        current_change = [
+            [
+                clickData['points'][0]['x'], 
+                clickData['points'][0]['y'], 
+                current_val,
+                new_val
+            ]
+        ]
+
+    if n_clicks_preview > preview_counter:
+        if not current_change:
             changes_text = "No changes to show."
         else:
             changes_text = "\n".join([f"Edited cell: ({tag}, {userid}), old value: {old_val}, new value: {new_val}" 
-                                      for tag, userid, old_val, new_val in edited_cells])
-        return not is_open, html.Pre(changes_text)
-    if n_clicks_close > 0:
-        return not is_open, ""
+                                      for tag, userid, old_val, new_val in current_change])
+        return True, html.Pre(changes_text),  n_clicks_preview, close_preview_counter
+    if n_clicks_close > close_preview_counter:
+        return False, "", preview_counter, n_clicks_close
     raise dash.exceptions.PreventUpdate
 
 
@@ -418,11 +436,10 @@ def preview_changes(n_clicks_preview, n_clicks_close, is_open):
     prevent_initial_call=True
 )
 def save_changes(n_clicks):
-    global tags_per_user_df, pending_changes_df, heatmap_versions
+    global heatmap_versions
 
     if n_clicks > 0:
-        tags_per_user_df = pending_changes_df.copy()
-        heatmap_versions.append(tags_per_user_df.copy())
+        heatmap_versions.append(pending_changes[0].copy())
 
         options = [{'label': f"Version {i+1}", 'value': f"Version {i+1}"} for i in range(len(heatmap_versions))]
         current_version = f"Current version: Version {len(heatmap_versions)}"
