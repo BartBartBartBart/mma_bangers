@@ -36,3 +36,6 @@ Then:
     ```
 
     where `${CUDA}` should be replaced by either `cpu`, `cu102`, `cu113`, or `cu115` depending on your PyTorch installation (`torch.version.cuda`).
+
+## Data preparation
+
