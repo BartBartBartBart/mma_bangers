@@ -3,9 +3,13 @@ import dash
 from dash import Dash, html, dash_table, dcc, callback, Output, Input, State
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
+import widgets
+import callbacks
 
 from preprocessing import create_tags, tags_per_user, create_heatmap, normalize_df
 from constants import ALLOWED_TYPES
+
+FONT_AWESOME = "https://use.fontawesome.com/releases/v5.10.2/css/all.css"
 
 nrows = 2000
 
@@ -50,170 +54,199 @@ temporal_hm = create_heatmap(
 )
 
 # Initialize the app
-app = Dash()
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, FONT_AWESOME])
+
+help_popup_widget = widgets.create_help_popup()
+
 
 # App layout
 app.layout = dbc.Container(
     [
-        html.Div(
-            children='StackOverflow Hypergraph Analysis',
-            style={
-                'textAlign': 'center',
-                'fontSize': 20,
-                'padding': 10
-            }
+        html.A(
+            dbc.Row(
+                [
+                    dbc.Col(
+                        dbc.NavbarBrand(
+                            html.H4("StackOverflow Hypergraph Analysis"), 
+                            className="ms-2"),
+                            width={"size": 6, "offset": 3}
+                        ),
+                ], align="center", className="g-0", justify="center"
+            ),
         ),
         html.Hr(),
         dbc.Container(
             [
                 dbc.Container(
                     [
-                        dbc.Container(
-                            [
-                                html.P("Toolbar"),
-                                dbc.Container(
-                                    [
-                                        html.Label('Input number to add changes:'),
-                                        dbc.Col(
-                                            dcc.Input(
-                                                id="input-number",
-                                                type="number",
-                                                placeholder="Input number",
-                                                debounce=True,
-                                                min = 0,
-                                                # max = 1,
-                                                step=0.1
-                                            ),
-                                            width=6,
-                                            className='cell-input'
-                                        ),
-                                        dbc.Col(
-                                            dbc.Col(
-                                                html.Div("Click on a cell to edit.", 
-                                                         id="edit-cell"),
-                                                width=6,
-                                                className='edit-cell'
-                                            ),
-                                            className='edit-cell-container'
-                                        )
-                                    ], 
-                                    fluid=True, className='cell-input-container'
+                        dbc.Row([
+                            dbc.Col(
+                                    html.P("Current Version: 1", id='current-version'),
                                 ),
-                                dbc.Container(
-                                    [
-                                        html.Label('Input number to preview changes:'),
-                                        dbc.Col(
-                                            dcc.Input(
-                                                id="preview-number",
-                                                type="number",
-                                                placeholder="Input number",
-                                                debounce=True,
-                                                min = 0,
-                                                # max = 1,
-                                                step=0.1
-                                            ),
-                                            width=6,
-                                            className='cell-input'
-                                        ),
-                                        dbc.Container(
-                                            html.Button("Preview Changes", id="preview-changes", n_clicks=0),
-                                            className='cell-input'
-                                        ),
-                                    ], 
-                                    fluid=True, className='cell-input-container'
-                                ),
-                                dcc.Store(id='preview-counter', data=0),
-                                dcc.Store(id='close-preview-counter', data=0),
-                                dbc.Container(
-                                    html.Button("Save Changes", id="save-changes", n_clicks=0),
-                                    className='cell-input'
-                                ),
-                                dbc.Container(
-                                    html.P("Currect version: Version 1",
-                                            id='current-version'),
-                                    fluid=True, className='current-version'
-                                ),
-                                dbc.Container(
-                                    [
-                                        html.Label('Select version:'),
-                                        dcc.Dropdown(
+                            dbc.Col(
+                                dbc.Stack([
+                                    html.Label('Select Version:'),
+                                    dcc.Dropdown(
                                             ["Version 1"], 
                                             id='version', 
                                             style={
                                                 'width': '100%',
                                                 'display': 'block',
                                             }
-                                        )
-                                    ],
-                                    fluid=True,
-                                    className='version-dropdown'
-                                )
+                                    )
+                                ]),    
+                            ),
+                        ]),
+                        dbc.Container(
+                            [
+                                dbc.Row(
+                                    [
+                                        dbc.Col(
+                                            dbc.Stack(
+                                                [
+                                                    html.Div(
+                                                        [
+                                                            "Edit a Cell",
+                                                            html.I(className="fas fa-question-circle fa-sm", id="tooltip-edit", style={"cursor":"pointer", "textAlign": "center"}),
+                                                            dbc.Tooltip(
+                                                                "Click on a cell to edit it",
+                                                                target="tooltip-edit",
+                                                                placement="top",
+                                                            ),
+                                                        ], id="edit-cell", className="text-muted"),
+                                                    dcc.Input(
+                                                        id="input-number",
+                                                        type="number",
+                                                        placeholder="Input number",
+                                                        debounce=True,
+                                                        min = 0,
+                                                        # max = 1,
+                                                        step=0.1
+                                                    ),
+                                                    
+                                                ],
+                                            ),
+                                        ),
+                                    ], align="center", className="p-3"
+                                ),
+                                dbc.Row(
+                                    [
+                                        dbc.Col(
+                                            dbc.Stack(
+                                                [
+                                                    html.Div(
+                                                        [
+                                                            "Link Prediction",
+                                                            html.I(className="fas fa-question-circle fa-sm", id="tooltip-link-prediction", style={"cursor":"pointer", "textAlign": "center"}),
+                                                            dbc.Tooltip(
+                                                                "Input number to preview changes",
+                                                                target="tooltip-link-prediction",
+                                                                placement="top",
+                                                            ),
+                                                        ], className="text-muted"
+                                                    ),
+                                                    dcc.Input(
+                                                        id="preview-number",
+                                                        type="number",
+                                                        placeholder="Input number",
+                                                        debounce=True,
+                                                        min = 0,
+                                                        # max = 1,
+                                                        step=0.1
+                                                    ),
+                                                ]
+                                            )
+                                        ), 
+                                    ], align="center", className="p-3"
+                                ),
+                                dcc.Store(id='preview-counter', data=0),
+                                dcc.Store(id='close-preview-counter', data=0),
+
+                                
+                                dbc.Container([
+                                    help_popup_widget,
+                                    dbc.Stack([
+                                        dbc.Button('Deselect', id='deselect-button', n_clicks=0, color="primary", className="me-1 m-2"),
+                                        dbc.Button("Preview Changes", id="preview-changes", n_clicks=0, color="primary", className="me-1 m-2"),
+                                        dbc.Button("Save Changes", id="save-changes", n_clicks=0, color="success", className="me-1 m-2"),
+                                        dbc.Button('Help', id='help-button', color="primary", className="me-1 m-2"),
+                                    ], direction="horizontal"),
+                                    
+                                ], fluid=True, className="cell-input"),
+                                
                             ],     
                             className='toolbar', fluid=True
                         ),
                         dbc.Container(
-                            dbc.Container(
-                                dcc.Graph(figure=tags_per_user_hm, id='tags-per-user'),
-                                fluid=True, className='heatmap'
+                            dbc.Row(
+                                [
+                                    dbc.Col(
+                                        dbc.Container(
+                                            children="Click on a cell to show a sample question",
+                                            id='show-question',
+                                            fluid=True, className='question', style={'height': '100%'}
+                                        ), width=4, className='question-container'
+                                    ),
+                                    dbc.Col(
+                                        dbc.Container(
+                                            dcc.Graph(figure=tags_per_user_hm, id='tags-per-user', style={'height': '100%', 'width': '100%'}),
+                                            fluid=True, className='heatmap', style={'overflow': 'auto'}
+                                        ),
+                                        width=8, className='heatmap-container'
+                                    ),
+                                ]
                             ),
-                            fluid=True, className='heatmap-container'
-                        ),
-                    ], 
-                    fluid=True, className='graph-toolbar-container'
-                ),
-                dbc.Col(
-                    dbc.Container(
-                        children="Click on a cell to show a sample question",
-                        id='show-question',
-                        fluid=True, className='question'
-                    ),
-                    className='question-container'
-                ),
-            ],
-            fluid=True, className='main-container'
-        ),
-        dbc.Container(
-            [
-                dbc.Container(
-                    [
-                        html.P("Choose two versions to compare"),
+                            
+                        ), 
                         dbc.Container(
                             [
-                                html.Label('From:'),
-                                dcc.Dropdown(
-                                    ["Version 1"], 
-                                    id='compare-version-1', 
-                                    style={
-                                        'width': '100%',
-                                        'display': 'block',
-                                    }
+                                dbc.Row(
+                                    [
+                                        dbc.Col(
+                                            [
+                                                html.Div("Choose two versions to compare"),
+                                                dbc.Container(
+                                                    [
+                                                        html.Label('From:'),
+                                                        dcc.Dropdown(
+                                                            ["Version 1"], 
+                                                            id='compare-version-1', 
+                                                            style={
+                                                                'width': '100%',
+                                                                'display': 'block',
+                                                            }
+                                                        ),
+                                                        # html.P("versus"),
+                                                        html.Label('To:'),
+                                                        dcc.Dropdown(
+                                                            ["Version 1"], 
+                                                            id='compare-version-2', 
+                                                            style={
+                                                                'width': '100%',
+                                                                'display': 'block',
+                                                            }
+                                                        )
+                                                    ], className='compare-version-dropdown'
+                                                ),
+                                            ], className="temporal-toolbar"
+                                        ),
+                                    ]
                                 ),
-                                # html.P("versus"),
-                                html.Label('To:'),
-                                dcc.Dropdown(
-                                    ["Version 1"], 
-                                    id='compare-version-2', 
-                                    style={
-                                        'width': '100%',
-                                        'display': 'block',
-                                    }
+                                dbc.Row(
+                                    dbc.Container(
+                                            dcc.Graph(figure=temporal_hm, id='temporal-matrix'),
+                                            fluid=True, className='heatmap-container', style={'maxHeight': '100%', 'maxWidth': '100%', 'overflow': 'auto'}
+                                        ), 
                                 )
-                            ],
-                            fluid=True,
-                            className='compare-version-dropdown'
-                        )
-                    ],     
-                    className='temporal-toolbar', fluid=True
+                            ]
+                        ),
+
+                    ], 
+                    
                 ),
-                dbc.Container(
-                    dbc.Container(
-                        dcc.Graph(figure=temporal_hm, id='temporal-matrix'),
-                        fluid=True, className='heatmap'
-                    ),
-                    fluid=True, className='heatmap-container'
-                )
+                
             ],
-            fluid=True, className='graph-toolbar-container'
+            fluid=True, className='main-container'
         ),
         dbc.Modal(
             [
@@ -266,11 +299,33 @@ def show_sample_question(clickData, q_df=q_df, a_df=a_df):
     Output('tags-per-user', 'figure', allow_duplicate=True),
     Input('tags-per-user', 'clickData'),
     Input("input-number", "value"),
+    Input("deselect-button", "n_clicks"),
     prevent_initial_call=True
 )
-def edit_cell(clickData, input_number):    
+def edit_cell(clickData, input_number, deselect_clicks):    
     global pending_changes, edited_cells
 
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return dash.no_update
+    
+    if ctx.triggered[0]['prop_id'] == 'deselect-button.n_clicks':
+        # Reset all values to original DataFrame
+        pending_changes[0] = pending_changes[0].copy()
+        pending_changes[1] = normalize_df(pending_changes[0])
+        
+        tags_per_user_hm = create_heatmap(
+            pending_changes[1], # latest normalized df
+            title='Tags per user',
+            xaxis='Tags',
+            yaxis='Users'
+        )
+        return [
+            'Click on a cell to edit.', 
+            '', 
+            tags_per_user_hm
+        ]
+    
     if clickData is None:
         tags_per_user_hm = create_heatmap(
             pending_changes[1], # latest normalized df
