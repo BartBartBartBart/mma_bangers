@@ -14,3 +14,4 @@ dependencies:
   - python=3.11.3
   - scikit-learn
   - seaborn
+  - wandb

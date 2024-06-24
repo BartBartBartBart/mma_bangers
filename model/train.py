@@ -2,6 +2,8 @@ import torch
 from topomodelx.nn.hypergraph.unigcn import UniGCN
 from tqdm import tqdm
 import pandas as pd
+from data.preprocessing import get_tags_per_user
+import wandb
 
 
 def indcidence_from_counts(counts):
@@ -14,7 +16,7 @@ class PostCountPredictor(torch.nn.Module):
 
         self.unigcn = UniGCN(in_channels=embedding_dim, hidden_channels=embedding_dim)
         embedding_dim = 32
-        mlp = torch.nn.Sequential(
+        self.mlp = torch.nn.Sequential(
             torch.nn.Linear(embedding_dim * 2, embedding_dim),
             torch.nn.Linear(embedding_dim, embedding_dim),
             torch.nn.Linear(embedding_dim, 1),
@@ -32,14 +34,14 @@ class PostCountPredictor(torch.nn.Module):
         output_counts = torch.zeros_like(incidence_1, dtype=torch.float)
         output_counts[node_indices, hyperedge_indices] = mlp_outputs
         
-        return x_0_new, output_counts
+        return output_counts
         
 
-def train(model, optimizer, criterion, epochs, x_0, incidence_1, target, finetune_idx=None):
+def train(model, optimizer, criterion, epochs, x_0, incidence_1, target, finetune_idx=None, logging=False):
     model.train()
     for epoch in tqdm(range(epochs)):
         optimizer.zero_grad()
-        x_0_new, output_counts = model(x_0, incidence_1)
+        output_counts = model(x_0.weight, incidence_1)
 
         if finetune_idx is None:
             loss = criterion(output_counts, target)
@@ -47,35 +49,51 @@ def train(model, optimizer, criterion, epochs, x_0, incidence_1, target, finetun
             loss = criterion(output_counts[finetune_idx], target[finetune_idx])
 
         loss.backward()
-        optimizer.step()
+        optimizer.step() # node embeddings are updated here
 
-        x_0 = x_0_new
-        print(f'Epoch: {epoch}, Loss: {loss.item()}')
+        if logging:
+            # graph loss
+            wandb.log({"epoch": epoch + 1, "loss": loss.item()})
 
-    return model, x_0
+    return model, torch.nn.Embedding.from_pretrained(x_0.weight)
 
 
 if __name__ == "__main__":
     # TODO Train model and save trainable params in node_embeddings.pt and mlp_params.pt files
+    tags_per_user_df = get_tags_per_user(data_dir="./data")
+    logging = False
 
-    # print(tags_per_user_df)
+    num_nodes = tags_per_user_df.shape[0]
+    x_0 = torch.nn.Embedding(num_nodes, 32)
+    target = torch.tensor(tags_per_user_df.to_numpy(), dtype=torch.float)
+    incidence_1 = torch.zeros_like(target, dtype=torch.float)
+    incidence_1[target >= 1] = 1.0
+    embedding_dim = 32
 
-    # num_nodes = tags_per_user_df.shape[0]
-    # x_0 = torch.nn.Embedding(num_nodes, 32)
-    # target = torch.tensor(tags_per_user_df.to_numpy())
-    # incidence_1 = torch.tensor(tags_per_user_df.to_numpy()) != 0
-    # embedding_dim = 32
+    model = PostCountPredictor(embedding_dim)
+    model_parameters = list(model.parameters())
+    embedding_parameters = list(x_0.parameters())
+    all_parameters = model_parameters + embedding_parameters
+    optimizer = torch.optim.Adam(all_parameters, lr=0.01)
 
-    # model = PostCountPredictor(embedding_dim)
-    # model_parameters = list(model.parameters())
-    # embedding_parameters = [x_0]
-    # all_parameters = model_parameters + embedding_parameters
-    # model = train(
-    #     model=model,
-    #     optimizer=torch.optim.Adam(all_parameters, lr=0.01),
-    #     criterion=torch.nn.MSELoss(),
-    #     epochs=100,
-    #     x_0=x_0,
-    #     incidence_1=incidence_1,
-    #     target=target,
-    # )
+    if logging:
+        wandb.login(key=open("WANDB_API_KEY.txt").readline().strip())
+        wandb.init(project="hypergraph_visualization", config={"epochs": 100})
+        wandb.watch(model)
+
+    model, x_0 = train(
+        model=model,
+        optimizer=optimizer,
+        criterion=torch.nn.MSELoss(),
+        epochs=100,
+        x_0=x_0,
+        incidence_1=incidence_1,
+        target=target,
+        logging=logging,
+    )
+
+    torch.save(model.state_dict(), "saved_params/model_state_dict.pt")
+    torch.save(x_0.weight, "saved_params/node_embeddings.pt")
+
+    if logging:
+        wandb.finish()
