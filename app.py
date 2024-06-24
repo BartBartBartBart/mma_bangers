@@ -5,8 +5,10 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import widgets
 import callbacks
+import torch.nn as nn
+import umap
 
-from preprocessing import create_tags, tags_per_user, create_heatmap, normalize_df
+from preprocessing import create_tags, tags_per_user, create_heatmap, normalize_df, create_embedding_fig
 from constants import ALLOWED_TYPES
 
 FONT_AWESOME = "https://use.fontawesome.com/releases/v5.10.2/css/all.css"
@@ -39,8 +41,6 @@ tags_per_user_hm = create_heatmap(
     yaxis='Users'
 )
 
-print("DONE REFRESHING")
-
 edited_cells = []
 
 # create temporal matrix initialised with zeros
@@ -53,11 +53,20 @@ temporal_hm = create_heatmap(
     colourscale=[[0, "red"], [0.5, "white"], [1, "green"]]
 )
 
+# map the embeddings to 2D space with umap
+num_users = 100
+embeddings = nn.Embedding(num_users, 32)
+umap_fig = create_embedding_fig(embeddings)
+
+# create list of all tags
+all_tags = list(tags['Tag'])
+
 # Initialize the app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, FONT_AWESOME])
 
 help_popup_widget = widgets.create_help_popup()
 
+print("DONE REFRESHING")
 
 # App layout
 app.layout = dbc.Container(
@@ -120,7 +129,6 @@ app.layout = dbc.Container(
                                                         placeholder="Input number",
                                                         debounce=True,
                                                         min = 0,
-                                                        # max = 1,
                                                         step=0.1
                                                     ),
                                                     
@@ -129,36 +137,6 @@ app.layout = dbc.Container(
                                         ),
                                     ], align="center", className="p-3"
                                 ),
-                                # dbc.Row(
-                                #     [
-                                #         dbc.Col(
-                                #             dbc.Stack(
-                                #                 [
-                                #                     html.Div(
-                                #                         [
-                                #                             "Link Prediction",
-                                #                             html.I(className="fas fa-question-circle fa-sm", id="tooltip-link-prediction", style={"cursor":"pointer", "textAlign": "center"}),
-                                #                             dbc.Tooltip(
-                                #                                 "Input number to preview changes",
-                                #                                 target="tooltip-link-prediction",
-                                #                                 placement="top",
-                                #                             ),
-                                #                         ], className="text-muted"
-                                #                     ),
-                                #                     dcc.Input(
-                                #                         id="preview-number",
-                                #                         type="number",
-                                #                         placeholder="Input number",
-                                #                         debounce=True,
-                                #                         min = 0,
-                                #                         # max = 1,
-                                #                         step=0.1
-                                #                     ),
-                                #                 ]
-                                #             )
-                                #         ), 
-                                #     ], align="center", className="p-3"
-                                # ),
                                 dcc.Store(id='preview-counter', data=0),
                                 dcc.Store(id='close-preview-counter', data=0),
                                 dcc.Store(id='implement-counter', data=0),
@@ -217,7 +195,6 @@ app.layout = dbc.Container(
                                                                 'display': 'block',
                                                             }
                                                         ),
-                                                        # html.P("versus"),
                                                         html.Label('To:'),
                                                         dcc.Dropdown(
                                                             ["Version 1"], 
@@ -241,7 +218,40 @@ app.layout = dbc.Container(
                                 )
                             ]
                         ),
-
+                        dbc.Container(
+                            [
+                                dbc.Row(
+                                    [
+                                        dbc.Col(
+                                            [
+                                                html.Div("UMAP of embeddings"),
+                                                dbc.Container(
+                                                    [
+                                                        html.Label('Select Tag:'),
+                                                        dcc.Dropdown(
+                                                            all_tags, 
+                                                            id='umap-tag', 
+                                                            style={
+                                                                'width': '50%',
+                                                                'display': 'block',
+                                                            }
+                                                        ),
+                                                    ], 
+                                                    className='umap-dropdown',
+                                                ),
+                                            ],
+                                            className="temporal-toolbar"
+                                        ),
+                                    ]
+                                ),
+                                dbc.Row(
+                                    dbc.Container(
+                                            dcc.Graph(figure=umap_fig, id='umap'),
+                                            fluid=True, className='heatmap-container', style={'maxHeight': '100%', 'maxWidth': '100%', 'overflow': 'auto'}
+                                        ), 
+                                )
+                            ]
+                        ),
                     ], 
                     
                 ),
@@ -376,7 +386,6 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
             clickData
         ]
     else: 
-        # if input_number is None or input_number == '':
         tags_per_user_hm = create_heatmap(
             pending_changes[1], # latest normalized df
             title='Tags per user',
@@ -416,7 +425,6 @@ def update_heatmap(version):
     return [
         tags_per_user_hm,
         f"Current version: Version {version_index + 1}",
-        # temporal_heatmap
     ]
 
 @app.callback(
@@ -464,7 +472,6 @@ def compare_versions(version1, version2):
     Input("preview-changes", "n_clicks"),
     Input("close-preview", "n_clicks"),
     Input('tags-per-user', 'clickData'),
-    # Input("preview-number", "value"),
     Input("preview-counter", "data"),
     Input("close-preview-counter", "data"),
     State("input-number", "value"),
