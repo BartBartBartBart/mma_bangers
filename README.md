@@ -40,14 +40,9 @@ Then:
 
     where `${CUDA}` should be replaced by either `cpu`, `cu102`, `cu113`, or `cu115` depending on your PyTorch installation (`torch.version.cuda`).
 
-<<<<<<< HEAD
-## Data preparation
-
-=======
 ## Run interactive app
 When you have installed the data and activated the environment you can run the app by executing:
 
 ```bash
 python app.py
 ```
->>>>>>> 2ec5943ed1b54207edc1d4e07981b8d035692bbd

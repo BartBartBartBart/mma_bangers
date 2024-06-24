@@ -4,6 +4,7 @@ channels:
   - defaults
 dependencies:
   - dash
+  - dash-bootstrap-components
   - matplotlib
   - networkx
   - numpy

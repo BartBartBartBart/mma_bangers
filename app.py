@@ -3,7 +3,7 @@ from dash import Dash, html, dash_table, dcc, callback, Output, Input
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 
-from preprocessing import create_tags, tags_per_user, create_heatmap
+from data.preprocessing import create_tags, tags_per_user, create_heatmap
 from constants import ALLOWED_TYPES
 
 nrows = 2000
