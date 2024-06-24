@@ -169,6 +169,7 @@ app.layout = dbc.Container(
                                         dbc.Button("Implement Changes", id="implement-changes", n_clicks=0, color="primary", className="me-1 m-2"),
                                         dbc.Button("Preview Changes", id="preview-changes", n_clicks=0, color="primary", className="me-1 m-2"),
                                         dbc.Button('Deselect', id='deselect-button', n_clicks=0, color="primary", className="me-1 m-2"),
+                                        dbc.Button("Edit Backlog", id="edit-backlog", n_clicks=0, color="primary", className="me-1 m-2"),
                                         dbc.Button("Save Changes", id="save-changes", n_clicks=0, color="success", className="me-1 m-2"),
                                         dbc.Button('Help', id='help-button', color="primary", className="me-1 m-2"),
                                     ], direction="horizontal"),
@@ -213,7 +214,7 @@ app.layout = dbc.Container(
                                                             ["Version 1"], 
                                                             id='compare-version-1', 
                                                             style={
-                                                                'width': '100%',
+                                                                'width': '100px',
                                                                 'display': 'block',
                                                             }
                                                         ),
@@ -223,7 +224,7 @@ app.layout = dbc.Container(
                                                             ["Version 1"], 
                                                             id='compare-version-2', 
                                                             style={
-                                                                'width': '100%',
+                                                                'width': '100px',
                                                                 'display': 'block',
                                                             }
                                                         )
@@ -325,8 +326,18 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
             yaxis='Users'
         )
         return [
-            'Click on a cell to edit.', 
-            '', 
+            html.Div(
+                [
+                    "Edit a Cell",
+                    html.I(className="fas fa-question-circle fa-sm", id="tooltip-edit", style={"cursor":"pointer", "textAlign": "center"}),
+                    dbc.Tooltip(
+                        "Click on a cell to edit it",
+                        target="tooltip-edit",
+                        placement="top",
+                    ),
+                ], id="edit-cell", className="text-muted"
+            ), 
+            '',
             tags_per_user_hm,
             implement_clicks,
             None
@@ -519,6 +530,28 @@ def save_changes(n_clicks):
         current_version = f"Current version: Version {len(heatmap_versions)}"
 
         return options, current_version, options, options
+    raise dash.exceptions.PreventUpdate
+
+@app.callback(
+    Output("preview-modal", "is_open", allow_duplicate=True),
+    Output("preview-content", "children", allow_duplicate=True),
+    Input("edit-backlog", "n_clicks"),
+    Input("close-preview", "n_clicks"),
+    State("preview-modal", "is_open"),
+    prevent_initial_call=True
+)
+def edit_backlog(n_clicks_preview, n_clicks_close, is_open):
+    global edited_cells
+
+    if n_clicks_preview > 0:
+        if not edited_cells:
+            changes_text = "No changes to show."
+        else:
+            changes_text = "\n".join([f"Edited cell: ({tag}, {userid}), old value: {old_val}, new value: {new_val}" 
+                                      for tag, userid, old_val, new_val in edited_cells])
+        return not is_open, html.Pre(changes_text)
+    if n_clicks_close > 0:
+        return not is_open, ""
     raise dash.exceptions.PreventUpdate
 
 if __name__ == '__main__':
