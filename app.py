@@ -129,45 +129,46 @@ app.layout = dbc.Container(
                                         ),
                                     ], align="center", className="p-3"
                                 ),
-                                dbc.Row(
-                                    [
-                                        dbc.Col(
-                                            dbc.Stack(
-                                                [
-                                                    html.Div(
-                                                        [
-                                                            "Link Prediction",
-                                                            html.I(className="fas fa-question-circle fa-sm", id="tooltip-link-prediction", style={"cursor":"pointer", "textAlign": "center"}),
-                                                            dbc.Tooltip(
-                                                                "Input number to preview changes",
-                                                                target="tooltip-link-prediction",
-                                                                placement="top",
-                                                            ),
-                                                        ], className="text-muted"
-                                                    ),
-                                                    dcc.Input(
-                                                        id="preview-number",
-                                                        type="number",
-                                                        placeholder="Input number",
-                                                        debounce=True,
-                                                        min = 0,
-                                                        # max = 1,
-                                                        step=0.1
-                                                    ),
-                                                ]
-                                            )
-                                        ), 
-                                    ], align="center", className="p-3"
-                                ),
+                                # dbc.Row(
+                                #     [
+                                #         dbc.Col(
+                                #             dbc.Stack(
+                                #                 [
+                                #                     html.Div(
+                                #                         [
+                                #                             "Link Prediction",
+                                #                             html.I(className="fas fa-question-circle fa-sm", id="tooltip-link-prediction", style={"cursor":"pointer", "textAlign": "center"}),
+                                #                             dbc.Tooltip(
+                                #                                 "Input number to preview changes",
+                                #                                 target="tooltip-link-prediction",
+                                #                                 placement="top",
+                                #                             ),
+                                #                         ], className="text-muted"
+                                #                     ),
+                                #                     dcc.Input(
+                                #                         id="preview-number",
+                                #                         type="number",
+                                #                         placeholder="Input number",
+                                #                         debounce=True,
+                                #                         min = 0,
+                                #                         # max = 1,
+                                #                         step=0.1
+                                #                     ),
+                                #                 ]
+                                #             )
+                                #         ), 
+                                #     ], align="center", className="p-3"
+                                # ),
                                 dcc.Store(id='preview-counter', data=0),
                                 dcc.Store(id='close-preview-counter', data=0),
-
+                                dcc.Store(id='implement-counter', data=0),
                                 
                                 dbc.Container([
                                     help_popup_widget,
                                     dbc.Stack([
-                                        dbc.Button('Deselect', id='deselect-button', n_clicks=0, color="primary", className="me-1 m-2"),
+                                        dbc.Button("Implement Changes", id="implement-changes", n_clicks=0, color="primary", className="me-1 m-2"),
                                         dbc.Button("Preview Changes", id="preview-changes", n_clicks=0, color="primary", className="me-1 m-2"),
+                                        dbc.Button('Deselect', id='deselect-button', n_clicks=0, color="primary", className="me-1 m-2"),
                                         dbc.Button("Save Changes", id="save-changes", n_clicks=0, color="success", className="me-1 m-2"),
                                         dbc.Button('Help', id='help-button', color="primary", className="me-1 m-2"),
                                     ], direction="horizontal"),
@@ -297,20 +298,23 @@ def show_sample_question(clickData, q_df=q_df, a_df=a_df):
     Output("edit-cell", "children"),
     Output("input-number", "value"),
     Output('tags-per-user', 'figure', allow_duplicate=True),
+    Output('implement-counter', 'data'),
+    Output('tags-per-user', 'clickData'),
     Input('tags-per-user', 'clickData'),
-    Input("input-number", "value"),
     Input("deselect-button", "n_clicks"),
+    Input("implement-changes", "n_clicks"),
+    Input("implement-counter", "data"),
+    State("input-number", "value"),
     prevent_initial_call=True
 )
-def edit_cell(clickData, input_number, deselect_clicks):    
+def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, input_number):    
     global pending_changes, edited_cells
 
     ctx = dash.callback_context
     if not ctx.triggered:
         return dash.no_update
-    
+
     if ctx.triggered[0]['prop_id'] == 'deselect-button.n_clicks':
-        # Reset all values to original DataFrame
         pending_changes[0] = pending_changes[0].copy()
         pending_changes[1] = normalize_df(pending_changes[0])
         
@@ -323,7 +327,9 @@ def edit_cell(clickData, input_number, deselect_clicks):
         return [
             'Click on a cell to edit.', 
             '', 
-            tags_per_user_hm
+            tags_per_user_hm,
+            implement_clicks,
+            None
         ]
     
     if clickData is None:
@@ -336,10 +342,41 @@ def edit_cell(clickData, input_number, deselect_clicks):
         return [
             'Click on a cell to edit.', 
             '',
-            tags_per_user_hm
+            tags_per_user_hm,
+            implement_clicks,
+            clickData
         ]
     current_val = pending_changes[0].loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
-    if input_number is None or input_number == '':
+
+    if implement_clicks > implement_counter and input_number is not None and input_number != '':
+
+        # update heatmap with new value
+        updated_heatmap = pending_changes[0].copy()
+        updated_heatmap.loc[clickData['points'][0]['y'], clickData['points'][0]['x']] = input_number
+        pending_changes[0] = updated_heatmap
+        pending_changes[1] = normalize_df(updated_heatmap)
+
+        # track edited cells
+        edited_cells.append((clickData['points'][0]['x'], clickData['points'][0]['y'], current_val, input_number))
+
+        tags_per_user_hm = create_heatmap(
+            pending_changes[1], # latest normalized df
+            title='Tags per user',
+            xaxis='Tags',
+            yaxis='Users'
+        )
+
+        implement_counter += 1
+
+        return [
+            html.Div(f"Editing cell ({clickData['points'][0]['x']}, {clickData['points'][0]['y']}), new value: {input_number}"),
+            '',
+            tags_per_user_hm,
+            implement_counter,
+            clickData
+        ]
+    else: 
+        # if input_number is None or input_number == '':
         tags_per_user_hm = create_heatmap(
             pending_changes[1], # latest normalized df
             title='Tags per user',
@@ -348,31 +385,12 @@ def edit_cell(clickData, input_number, deselect_clicks):
         )
         return [
             html.Div(f"Clicked on cell: ({clickData['points'][0]['x']}, {clickData['points'][0]['y']}), current value: {current_val}"), 
-            '', 
-            tags_per_user_hm
+            input_number, 
+            tags_per_user_hm,
+            implement_clicks,
+            clickData
         ]
-
-    # update heatmap with new value
-    updated_heatmap = pending_changes[0].copy()
-    updated_heatmap.loc[clickData['points'][0]['y'], clickData['points'][0]['x']] = input_number
-    pending_changes[0] = updated_heatmap
-    pending_changes[1] = normalize_df(updated_heatmap)
-
-    # track edited cells
-    edited_cells.append((clickData['points'][0]['x'], clickData['points'][0]['y'], current_val, input_number))
-
-    tags_per_user_hm = create_heatmap(
-        pending_changes[1], # latest normalized df
-        title='Tags per user',
-        xaxis='Tags',
-        yaxis='Users'
-    )
-
-    return [
-        html.Div(f"Editing cell ({clickData['points'][0]['x']}, {clickData['points'][0]['y']}), new value: {input_number}"),
-        '',
-        tags_per_user_hm
-    ]
+    
 
 @app.callback(
     Output('tags-per-user', 'figure'),
@@ -446,16 +464,17 @@ def compare_versions(version1, version2):
     Input("preview-changes", "n_clicks"),
     Input("close-preview", "n_clicks"),
     Input('tags-per-user', 'clickData'),
-    Input("preview-number", "value"),
+    # Input("preview-number", "value"),
     Input("preview-counter", "data"),
     Input("close-preview-counter", "data"),
+    State("input-number", "value"),
     prevent_initial_call=True
 )
-def preview_changes(n_clicks_preview, n_clicks_close, clickData, preview_number, preview_counter, close_preview_counter):
+def preview_changes(n_clicks_preview, n_clicks_close, clickData, preview_counter, close_preview_counter, preview_number):
     # global edited_cells
 
     current_change = []
-    if clickData is not None and preview_number is not None and n_clicks_preview > 0:
+    if clickData is not None and preview_number is not None and n_clicks_preview > preview_counter:
         preview_df = pending_changes[0].copy()
         current_val = preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
         preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']] = preview_number
