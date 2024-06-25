@@ -149,7 +149,7 @@ app.layout = dbc.Container(
                                                 [
                                                     html.Div(
                                                         [
-                                                            "Edit a Cell",
+                                                            "Edit a Cell ",
                                                             html.I(className="fas fa-question-circle fa-sm", id="tooltip-edit", style={"cursor":"pointer", "textAlign": "center"}),
                                                             dbc.Tooltip(
                                                                 "Click on a cell to edit it",
@@ -203,7 +203,7 @@ app.layout = dbc.Container(
                                     ),
                                     dbc.Col(
                                         dbc.Container(
-                                            dcc.Graph(figure=tags_per_user_hm, id='tags-per-user', style={'height': '100%', 'width': '100%'}),
+                                            dcc.Graph(figure=tags_per_user_hm, id='tags-per-user', style={'height': '100%', 'width': '10%'}),
                                             fluid=True, className='heatmap', style={'overflow': 'auto'}
                                         ),
                                         width=8, className='heatmap-container'
@@ -221,7 +221,7 @@ app.layout = dbc.Container(
                                                 html.Div("Choose two versions to compare"),
                                                 dbc.Container(
                                                     [
-                                                        html.Label('From:'),
+                                                        html.P('From:'),
                                                         dcc.Dropdown(
                                                             ["Version 1"], 
                                                             id='compare-version-1', 
@@ -230,7 +230,7 @@ app.layout = dbc.Container(
                                                                 'display': 'block',
                                                             }
                                                         ),
-                                                        html.Label('To:'),
+                                                        html.P('To:'),
                                                         dcc.Dropdown(
                                                             ["Version 1"], 
                                                             id='compare-version-2', 
@@ -259,10 +259,19 @@ app.layout = dbc.Container(
                                     [
                                         dbc.Col(
                                             [
-                                                html.Div("UMAP of embeddings"),
-                                                dbc.Container(
+                                                html.P("UMAP of embeddings"),
+                                                dbc.Stack(
                                                     [
-                                                        html.Label('Select Tag:'),
+                                                        html.Div(
+                                                            [
+                                                                "Select Tag to Highlight: ",
+                                                                html.I(className="fas fa-question-circle fa-sm", id="umap-tooltip", style={"cursor":"pointer", "textAlign": "center"}),
+                                                                dbc.Tooltip(
+                                                                    "Selecting a tag highlights the users that have that tag in red",
+                                                                    target="umap-tooltip",
+                                                                    placement="top",
+                                                                ),
+                                                            ], id="edit-cell", className="text-muted"),
                                                         dcc.Dropdown(
                                                             all_tags, 
                                                             id='umap-tag', 
@@ -271,8 +280,7 @@ app.layout = dbc.Container(
                                                                 'display': 'block',
                                                             }
                                                         ),
-                                                    ], 
-                                                    className='umap-dropdown',
+                                                    ],
                                                 ),
                                             ],
                                             className="temporal-toolbar"
@@ -553,15 +561,13 @@ def preview_changes(n_clicks_preview, n_clicks_close, clickData, preview_counter
     # TODO: add fintuning
     # global edited_cells
 
-    current_change = []
+    changes = []
     if clickData is not None and preview_number is not None and n_clicks_preview > preview_counter:
         preview_df = pending_changes[0].copy()
-        current_val = preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
         preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']] = preview_number
-        new_val = preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
 
         # model finetuning
-        _, changes = finetune(
+        _, changes, _ = finetune(
             pending_changes, 
             tags_per_user_df, 
             model, optimizer, 
@@ -570,7 +576,7 @@ def preview_changes(n_clicks_preview, n_clicks_close, clickData, preview_counter
         )
 
     if n_clicks_preview > preview_counter:
-        if not changes:
+        if len(changes) == 0:
             changes_text = "No changes to show."
         else:
             changes_text = "\n".join([f"Edited cell: ({tag}, {userid}), old value: {old_val}, new value: {new_val}" 

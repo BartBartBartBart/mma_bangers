@@ -17,10 +17,10 @@ body {
 }
 
 p {
-    font-family: 'Poppins';
-    color: #000000;
-    margin-left: 30px;
-    margin-top: 30px;
+    margin-left: 10px;
+    margin-top: 30px; 
+    margin-right: 10px;
+    margin-bottom: 30px;
 }
 
 .toolbar {
