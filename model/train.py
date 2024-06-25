@@ -39,6 +39,7 @@ class PostCountPredictor(torch.nn.Module):
 
 def train(model, optimizer, criterion, epochs, x_0, incidence_1, target, finetune_idx=None, logging=False):
     model.train()
+    x_0.train()
     for epoch in tqdm(range(epochs)):
         optimizer.zero_grad()
         output_counts = model(x_0.weight, incidence_1)
@@ -92,8 +93,8 @@ if __name__ == "__main__":
         logging=logging,
     )
 
-    torch.save(model.state_dict(), "saved_params/model_state_dict.pt")
-    torch.save(x_0.weight, "saved_params/node_embeddings.pt")
+    # torch.save(model.state_dict(), "saved_params/model_state_dict.pt")
+    # torch.save(x_0.weight, "saved_params/node_embeddings.pt")
 
     if logging:
         wandb.finish()
