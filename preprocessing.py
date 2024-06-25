@@ -1,5 +1,6 @@
 import pandas as pd
 import plotly.graph_objects as go
+import umap
 
 
 def comb_tags_func(x):
@@ -131,3 +132,11 @@ def create_heatmap(matrix, title, xaxis, yaxis, colourscale='Blues', zmid=None):
     heatmap = go.Figure(data=[heatmap], layout=layout)
     
     return heatmap
+
+def create_embedding_fig(embeddings):
+    reducer = umap.UMAP()
+    umap_embeddings = reducer.fit_transform(embeddings.weight.data.numpy())
+    umap_fig = go.Figure()
+    umap_fig.add_trace(go.Scatter(x=umap_embeddings[:,0], y=umap_embeddings[:,1], mode='markers'))
+    umap_fig.update_layout(title='UMAP of embeddings', xaxis_title='UMAP 1', yaxis_title='UMAP 2')
+    return umap_fig
