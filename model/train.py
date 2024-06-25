@@ -106,7 +106,7 @@ def finetune(pending_changes, tags_per_user_df, model, optimizer, x_0, clickData
             if current_value != predicted_value:
                 changes.append([user_id, tag, current_value, predicted_value])
 
-    return predicted_df, changes
+    return predicted_df, changes, x_0
 
 
 if __name__ == "__main__":

@@ -136,11 +136,15 @@ def create_heatmap(matrix, title, xaxis, yaxis, colourscale='Blues', zmid=None):
     
     return heatmap
 
-def create_embedding_fig(embeddings):
+def create_embedding_fig(embeddings, highlight_idx=[]):
     reducer = umap.UMAP()
     umap_embeddings = reducer.fit_transform(embeddings.weight.data.numpy())
     umap_fig = go.Figure()
-    umap_fig.add_trace(go.Scatter(x=umap_embeddings[:,0], y=umap_embeddings[:,1], mode='markers'))
+    for user_idx in range(umap_embeddings.shape[0]):
+        if user_idx in highlight_idx:
+            umap_fig.add_trace(go.Scatter(x=[umap_embeddings[user_idx,0]], y=[umap_embeddings[user_idx,1],], mode='markers', marker=dict(size=7, color='red')))
+        else:
+            umap_fig.add_trace(go.Scatter(x=[umap_embeddings[user_idx,0]], y=[umap_embeddings[user_idx,1],], mode='markers', marker=dict(size=7, color='blue')))
     umap_fig.update_layout(title='UMAP of embeddings', xaxis_title='UMAP 1', yaxis_title='UMAP 2')
     return umap_fig
 

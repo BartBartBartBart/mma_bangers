@@ -52,18 +52,11 @@ temporal_hm = create_heatmap(
     colourscale=[[0, "red"], [0.5, "white"], [1, "green"]]
 )
 
-# map the embeddings to 2D space with umap
-num_users = len(tags_per_user_df.index)
-umap_fig = create_embedding_fig(nn.Embedding(num_users, 32))
-# embeddings = nn.Embedding(num_users, 32)
-# umap_fig = create_embedding_fig(embeddings)
-
-# create list of all tags
-all_tags = list(tags['Tag'])
-
+# Model training
 logging = False
 num_nodes = tags_per_user_df.shape[0]
 x_0 = torch.nn.Embedding(num_nodes, 32)
+
 target = torch.tensor(tags_per_user_df.to_numpy(), dtype=torch.float)
 incidence_1 = torch.zeros_like(target, dtype=torch.float)
 incidence_1[target >= 1] = 1.0
@@ -96,6 +89,11 @@ model, x_0 = train(
 
 if logging:
     wandb.finish()
+
+# create list of all tags
+all_tags = tags_per_user_df.columns
+# create UMAP of embeddings
+umap_fig = create_embedding_fig(x_0)
 
 # Initialize the app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, FONT_AWESOME])
@@ -249,9 +247,9 @@ app.layout = dbc.Container(
                                 ),
                                 dbc.Row(
                                     dbc.Container(
-                                            dcc.Graph(figure=temporal_hm, id='temporal-matrix'),
-                                            fluid=True, className='heatmap-container', style={'maxHeight': '100%', 'maxWidth': '100%', 'overflow': 'auto'}
-                                        ), 
+                                        dcc.Graph(figure=temporal_hm, id='temporal-matrix'),
+                                        fluid=True, className='heatmap-container', style={'maxHeight': '100%', 'maxWidth': '100%', 'overflow': 'auto'}
+                                    ), 
                                 )
                             ]
                         ),
@@ -283,10 +281,10 @@ app.layout = dbc.Container(
                                 ),
                                 dbc.Row(
                                     dbc.Container(
-                                            dcc.Graph(figure=umap_fig, id='umap'),
-                                            fluid=True, className='heatmap-container', style={'maxHeight': '100%', 'maxWidth': '100%', 'overflow': 'auto'}
-                                        ), 
-                                )
+                                        dcc.Graph(figure=umap_fig, id='umap-figure'),
+                                        fluid=True, className='umap-container', style={'maxHeight': '100%', 'maxWidth': '100%', 'overflow': 'auto'}
+                                    ), 
+                                ),
                             ]
                         ),
                     ], 
@@ -310,6 +308,7 @@ app.layout = dbc.Container(
     ], 
     fluid=True, className='top-level-container'
 )
+
 
 @app.callback(
     Output('show-question', 'children'),
@@ -348,6 +347,7 @@ def show_sample_question(clickData, q_df=q_df, a_df=a_df):
     Output('tags-per-user', 'figure', allow_duplicate=True),
     Output('implement-counter', 'data'),
     Output('tags-per-user', 'clickData'),
+    Output('umap-figure', 'figure', allow_duplicate=True),
     Input('tags-per-user', 'clickData'),
     Input("deselect-button", "n_clicks"),
     Input("implement-changes", "n_clicks"),
@@ -355,7 +355,7 @@ def show_sample_question(clickData, q_df=q_df, a_df=a_df):
     State("input-number", "value"),
     prevent_initial_call=True
 )
-def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, input_number, model=model, x_0=x_0):    
+def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, input_number, model=model, x_0=x_0, umap_fig=umap_fig):    
     global pending_changes, edited_cells
 
     ctx = dash.callback_context
@@ -386,7 +386,8 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
             '',
             tags_per_user_hm,
             implement_clicks,
-            None
+            None,
+            umap_fig
         ]
     
     if clickData is None:
@@ -401,7 +402,8 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
             '',
             tags_per_user_hm,
             implement_clicks,
-            clickData
+            clickData,
+            umap_fig
         ]
     current_val = pending_changes[0].loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
 
@@ -422,7 +424,7 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
         tag_idx = list(pending_changes[0].columns).index(tag)
 
         # model finetuning
-        predicted_df, _ = finetune(
+        predicted_df, _, x_0 = finetune(
             pending_changes, 
             tags_per_user_df, 
             model, optimizer, 
@@ -431,6 +433,9 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
         )
 
         pending_changes[0] = predicted_df
+
+        # update umap
+        umap_fig = create_embedding_fig(x_0)
         
         # track edited cells
         edited_cells.append((clickData['points'][0]['x'], clickData['points'][0]['y'], current_val, input_number))
@@ -449,7 +454,8 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
             '',
             tags_per_user_hm,
             implement_counter,
-            clickData
+            clickData,
+            umap_fig
         ]
     else: 
         tags_per_user_hm = create_heatmap(
@@ -463,7 +469,8 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
             input_number, 
             tags_per_user_hm,
             implement_clicks,
-            clickData
+            clickData,
+            umap_fig
         ]
     
 
@@ -491,6 +498,7 @@ def update_heatmap(version):
         tags_per_user_hm,
         f"Current version: Version {version_index + 1}",
     ]
+
 
 @app.callback(
     Output('temporal-matrix', 'figure'),
@@ -526,6 +534,7 @@ def compare_versions(version1, version2):
     )
     
     return diff_heatmap
+
 
 @app.callback(
     Output("preview-modal", "is_open"),
@@ -592,6 +601,7 @@ def save_changes(n_clicks):
         return options, current_version, options, options
     raise dash.exceptions.PreventUpdate
 
+
 @app.callback(
     Output("preview-modal", "is_open", allow_duplicate=True),
     Output("preview-content", "children", allow_duplicate=True),
@@ -613,6 +623,41 @@ def edit_backlog(n_clicks_preview, n_clicks_close, is_open):
     if n_clicks_close > 0:
         return not is_open, ""
     raise dash.exceptions.PreventUpdate
+
+
+@app.callback(
+    Output('umap-figure', 'figure', allow_duplicate=True),
+    Input('umap-tag', 'value'),
+    prevent_initial_call=True
+)
+def highlight_tag(tag, all_tags=all_tags, x_0=x_0, pending_changes=pending_changes):
+    if tag not in all_tags:
+        return dash.no_update
+    
+    # embeddings are ordered the same as the users in pending_changes[0]
+    # so get index of users in pending_changes[0] that have the selected tag
+    tag_idx = []
+    for idx, user in enumerate(pending_changes[0].index):
+        if pending_changes[0].loc[user, tag] > 0:
+            tag_idx.append(idx)
+
+    # highlight with red the embeddings of users with the selected tag
+    umap_fig = create_embedding_fig(x_0, highlight_idx=tag_idx)
+    return umap_fig
+
+
+# @app.callback(
+#     Output('umap-figure', 'figure', allow_duplicate=True),
+#     Input('implement-changes', 'n_clicks'),
+#     Input('implement-counter', 'data'),
+#     prevent_initial_call=True
+# )
+# def update_umap(implement_button_clicks, implement_counter, x_0=x_0):
+#     if implement_button_clicks > implement_counter:
+#         umap_fig = create_embedding_fig(x_0)
+#         return umap_fig
+#     raise dash.exceptions.PreventUpdate
+
 
 if __name__ == '__main__':
     app.run(debug=True)
