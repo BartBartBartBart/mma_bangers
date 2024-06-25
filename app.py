@@ -1,19 +1,23 @@
-import pandas as pd 
+
+import pandas as pd
+import torch
+import wandb
 import dash
-from dash import Dash, html, dash_table, dcc, callback, Output, Input, State
+from dash import Dash, dcc, html, dash_table, callback, Input, Output, State
 import dash_bootstrap_components as dbc
+from data.preprocessing import create_tags, tags_per_user, create_heatmap, normalize_df
+from model.train import PostCountPredictor, train
 import plotly.graph_objects as go
 import widgets
 import callbacks
 import torch.nn as nn
 import umap
 
-from preprocessing import create_tags, tags_per_user, create_heatmap, normalize_df, create_embedding_fig
+# from preprocessing import create_tags, tags_per_user, create_heatmap, normalize_df, create_embedding_fig
 from constants import ALLOWED_TYPES
 
-FONT_AWESOME = "https://use.fontawesome.com/releases/v5.10.2/css/all.css"
-
 nrows = 2000
+FONT_AWESOME = "https://use.fontawesome.com/releases/v5.10.2/css/all.css"
 
 a_df = pd.read_csv('data/Answers.csv', encoding='latin-1', nrows=nrows)
 q_df = pd.read_csv('data/Questions.csv', encoding='latin-1', nrows=nrows)
@@ -31,7 +35,6 @@ tag_df = create_tags(tags, q_df)
 tags_per_user_df = tags_per_user(tag_df, q_df, a_df)
 heatmap_versions = [tags_per_user_df.copy()]
 pending_changes = [tags_per_user_df.copy()]
-tags_per_user_df = normalize_df(tags_per_user_df)
 pending_changes.append(tags_per_user_df.copy())
 
 tags_per_user_hm = create_heatmap(
@@ -62,6 +65,42 @@ umap_fig = create_embedding_fig(nn.Embedding(num_users, 32))
 
 # create list of all tags
 all_tags = list(tags['Tag'])
+
+logging = False
+num_nodes = tags_per_user_df.shape[0]
+x_0 = torch.nn.Embedding(num_nodes, 32)
+target = torch.tensor(tags_per_user_df.to_numpy(), dtype=torch.float)
+incidence_1 = torch.zeros_like(target, dtype=torch.float)
+incidence_1[target >= 1] = 1.0
+embedding_dim = 32
+
+model = PostCountPredictor(embedding_dim)
+model_parameters = list(model.parameters())
+embedding_parameters = list(x_0.parameters())
+all_parameters = model_parameters + embedding_parameters
+optimizer = torch.optim.Adam(all_parameters, lr=0.01)
+
+if logging:
+    wandb.login(key=open("WANDB_API_KEY.txt").readline().strip())
+    wandb.init(project="hypergraph_visualization", config={"epochs": 100})
+    wandb.watch(model)
+
+model, x_0 = train(
+    model=model,
+    optimizer=optimizer,
+    criterion=torch.nn.MSELoss(),
+    epochs=100,
+    x_0=x_0,
+    incidence_1=incidence_1,
+    target=target,
+    logging=logging,
+)
+
+# torch.save(model.state_dict(), "saved_params/model_state_dict.pt")
+# torch.save(x_0.weight, "saved_params/node_embeddings.pt")
+
+if logging:
+    wandb.finish()
 
 # Initialize the app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, FONT_AWESOME])
@@ -307,6 +346,7 @@ def show_sample_question(clickData, q_df=q_df, a_df=a_df):
         html.Div(children=f"Body: {question_text}")
     ]
 
+
 @app.callback(
     Output("edit-cell", "children"),
     Output("input-number", "value"),
@@ -329,10 +369,9 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
 
     if ctx.triggered[0]['prop_id'] == 'deselect-button.n_clicks':
         pending_changes[0] = pending_changes[0].copy()
-        pending_changes[1] = normalize_df(pending_changes[0])
         
         tags_per_user_hm = create_heatmap(
-            pending_changes[1], # latest normalized df
+            pending_changes[0], # latest df
             title='Tags per user',
             xaxis='Tags',
             yaxis='Users'
@@ -357,7 +396,7 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
     
     if clickData is None:
         tags_per_user_hm = create_heatmap(
-            pending_changes[1], # latest normalized df
+            pending_changes[0], # latest df
             title='Tags per user',
             xaxis='Tags',
             yaxis='Users'
@@ -377,13 +416,46 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
         updated_heatmap = pending_changes[0].copy()
         updated_heatmap.loc[clickData['points'][0]['y'], clickData['points'][0]['x']] = input_number
         pending_changes[0] = updated_heatmap
-        pending_changes[1] = normalize_df(updated_heatmap)
+
+        # Finetuning
+        # Map the User ID and Tag to Integer Indices
+        user_id = clickData['points'][0]['y']  # This is the specific user ID
+        user_idx = list(pending_changes[0].index).index(user_id)
+
+        # Find the integer index for the tag
+        tag = clickData['points'][0]['x']  # This is the tag (string)
+        tag_idx = list(pending_changes[0].columns).index(tag)
+
+        # model finetuning
+        logging = False
+        target = torch.tensor(pending_changes[0].to_numpy(), dtype=torch.float)
+        finetune_idx = torch.tensor([user_idx, tag_idx])
+        incidence_1 = torch.zeros_like(target, dtype=torch.float)
+        incidence_1[target >= 0.5] = 1.0
+
+
+        model, x_0 = train(
+            model=model,
+            optimizer=optimizer,
+            criterion=torch.nn.MSELoss(),
+            epochs=50,
+            x_0=x_0,
+            incidence_1=incidence_1,
+            target=target,
+            finetune_idx=finetune_idx,
+        )
+
+        # model prediction
+        model.eval()
+        x_0.eval()
+        predicted_tags_per_user = model(x_0.weight, incidence_1)
+        pending_changes[0] = pd.DataFrame(predicted_tags_per_user.detach().numpy(), index=tags_per_user_df.index, columns=tags_per_user_df.columns)
 
         # track edited cells
         edited_cells.append((clickData['points'][0]['x'], clickData['points'][0]['y'], current_val, input_number))
 
         tags_per_user_hm = create_heatmap(
-            pending_changes[1], # latest normalized df
+            pending_changes[0], # latest normalized df
             title='Tags per user',
             xaxis='Tags',
             yaxis='Users'
@@ -400,7 +472,7 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
         ]
     else: 
         tags_per_user_hm = create_heatmap(
-            pending_changes[1], # latest normalized df
+            pending_changes[0], # latest df
             title='Tags per user',
             xaxis='Tags',
             yaxis='Users'
@@ -412,6 +484,9 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
             implement_clicks,
             clickData
         ]
+    
+    # # update heatmap with new value
+    # tags_per_user_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']] = input_number
     
 
 @app.callback(
@@ -427,7 +502,6 @@ def update_heatmap(version):
         version_index = int(version.split(' ')[1]) - 1
     
     selected_df = heatmap_versions[version_index]
-    selected_df = normalize_df(selected_df)
     tags_per_user_hm = create_heatmap(
         selected_df,
         title='Tags per user',
@@ -458,9 +532,7 @@ def compare_versions(version1, version2):
         version2_index = int(version2.split(' ')[1]) - 1
     
     df1 = heatmap_versions[version1_index]
-    df1 = normalize_df(df1)
     df2 = heatmap_versions[version2_index]
-    df2 = normalize_df(df2)
     
     diff_df = df2 - df1
 
@@ -491,6 +563,7 @@ def compare_versions(version1, version2):
     prevent_initial_call=True
 )
 def preview_changes(n_clicks_preview, n_clicks_close, clickData, preview_counter, close_preview_counter, preview_number):
+    # TODO: add fintuning
     # global edited_cells
 
     current_change = []
@@ -498,7 +571,6 @@ def preview_changes(n_clicks_preview, n_clicks_close, clickData, preview_counter
         preview_df = pending_changes[0].copy()
         current_val = preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
         preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']] = preview_number
-        preview_df = normalize_df(preview_df)
         new_val = preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
         current_change = [
             [

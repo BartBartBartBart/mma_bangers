@@ -1,12 +1,14 @@
 import pandas as pd
 import plotly.graph_objects as go
 import umap
+import os
 
 
 def comb_tags_func(x):
     list_tags = x.values
     tag_comb = ' '.join(list_tags)
     return tag_comb
+
 
 # Tags per question id
 def create_tags(tags, q_df):
@@ -23,6 +25,7 @@ def create_tags(tags, q_df):
     q_df.dropna(inplace=True)
     q_df['tag'] = q_df['tag'].apply(lambda x : x.split())
     return q_df
+
 
 def tag_cooccurrence(tag_df):
     # get unique tags
@@ -140,3 +143,11 @@ def create_embedding_fig(embeddings):
     umap_fig.add_trace(go.Scatter(x=umap_embeddings[:,0], y=umap_embeddings[:,1], mode='markers'))
     umap_fig.update_layout(title='UMAP of embeddings', xaxis_title='UMAP 1', yaxis_title='UMAP 2')
     return umap_fig
+
+def get_tags_per_user(data_dir, nrows=2000):
+    a_df = pd.read_csv(os.path.join(data_dir, 'Answers.csv'), encoding='latin-1', nrows=nrows)
+    q_df = pd.read_csv(os.path.join(data_dir, 'Questions.csv'), encoding='latin-1', nrows=nrows)
+    tags = pd.read_csv(os.path.join(data_dir, 'Tags.csv'), encoding='latin-1', nrows=nrows)
+    tag_df = create_tags(tags, q_df)
+    tags_per_user_df = tags_per_user(tag_df, q_df, a_df)
+    return tags_per_user_df
