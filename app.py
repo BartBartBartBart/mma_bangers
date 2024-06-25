@@ -54,9 +54,11 @@ temporal_hm = create_heatmap(
 )
 
 # map the embeddings to 2D space with umap
-num_users = 100
-embeddings = nn.Embedding(num_users, 32)
-umap_fig = create_embedding_fig(embeddings)
+num_users = len(tags_per_user_df.index)
+print("Number of users: ", num_users)
+umap_fig = create_embedding_fig(nn.Embedding(num_users, 32))
+# embeddings = nn.Embedding(num_users, 32)
+# umap_fig = create_embedding_fig(embeddings)
 
 # create list of all tags
 all_tags = list(tags['Tag'])
