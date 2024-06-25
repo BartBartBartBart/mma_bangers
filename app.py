@@ -3,17 +3,13 @@ import pandas as pd
 import torch
 import wandb
 import dash
-from dash import Dash, dcc, html, dash_table, callback, Input, Output, State
+from dash import dcc, html,Input, Output, State
 import dash_bootstrap_components as dbc
-from data.preprocessing import create_tags, tags_per_user, create_heatmap, normalize_df
-from model.train import PostCountPredictor, train
-import plotly.graph_objects as go
 import widgets
-import callbacks
 import torch.nn as nn
-import umap
 
-# from preprocessing import create_tags, tags_per_user, create_heatmap, normalize_df, create_embedding_fig
+from data.preprocessing import create_tags, tags_per_user, create_heatmap, create_embedding_fig
+from model.train import PostCountPredictor, train, finetune
 from constants import ALLOWED_TYPES
 
 nrows = 2000
@@ -58,7 +54,6 @@ temporal_hm = create_heatmap(
 
 # map the embeddings to 2D space with umap
 num_users = len(tags_per_user_df.index)
-print("Number of users: ", num_users)
 umap_fig = create_embedding_fig(nn.Embedding(num_users, 32))
 # embeddings = nn.Embedding(num_users, 32)
 # umap_fig = create_embedding_fig(embeddings)
@@ -360,7 +355,7 @@ def show_sample_question(clickData, q_df=q_df, a_df=a_df):
     State("input-number", "value"),
     prevent_initial_call=True
 )
-def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, input_number):    
+def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, input_number, model=model, x_0=x_0):    
     global pending_changes, edited_cells
 
     ctx = dash.callback_context
@@ -427,35 +422,21 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
         tag_idx = list(pending_changes[0].columns).index(tag)
 
         # model finetuning
-        logging = False
-        target = torch.tensor(pending_changes[0].to_numpy(), dtype=torch.float)
-        finetune_idx = torch.tensor([user_idx, tag_idx])
-        incidence_1 = torch.zeros_like(target, dtype=torch.float)
-        incidence_1[target >= 0.5] = 1.0
-
-
-        model, x_0 = train(
-            model=model,
-            optimizer=optimizer,
-            criterion=torch.nn.MSELoss(),
-            epochs=50,
-            x_0=x_0,
-            incidence_1=incidence_1,
-            target=target,
-            finetune_idx=finetune_idx,
+        predicted_df, _ = finetune(
+            pending_changes, 
+            tags_per_user_df, 
+            model, optimizer, 
+            x_0,
+            clickData
         )
 
-        # model prediction
-        model.eval()
-        x_0.eval()
-        predicted_tags_per_user = model(x_0.weight, incidence_1)
-        pending_changes[0] = pd.DataFrame(predicted_tags_per_user.detach().numpy(), index=tags_per_user_df.index, columns=tags_per_user_df.columns)
-
+        pending_changes[0] = predicted_df
+        
         # track edited cells
         edited_cells.append((clickData['points'][0]['x'], clickData['points'][0]['y'], current_val, input_number))
 
         tags_per_user_hm = create_heatmap(
-            pending_changes[0], # latest normalized df
+            predicted_df, # latest normalized df
             title='Tags per user',
             xaxis='Tags',
             yaxis='Users'
@@ -484,9 +465,6 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
             implement_clicks,
             clickData
         ]
-    
-    # # update heatmap with new value
-    # tags_per_user_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']] = input_number
     
 
 @app.callback(
@@ -562,7 +540,7 @@ def compare_versions(version1, version2):
     State("input-number", "value"),
     prevent_initial_call=True
 )
-def preview_changes(n_clicks_preview, n_clicks_close, clickData, preview_counter, close_preview_counter, preview_number):
+def preview_changes(n_clicks_preview, n_clicks_close, clickData, preview_counter, close_preview_counter, preview_number, model=model, x_0=x_0):
     # TODO: add fintuning
     # global edited_cells
 
@@ -572,21 +550,22 @@ def preview_changes(n_clicks_preview, n_clicks_close, clickData, preview_counter
         current_val = preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
         preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']] = preview_number
         new_val = preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
-        current_change = [
-            [
-                clickData['points'][0]['x'], 
-                clickData['points'][0]['y'], 
-                current_val,
-                new_val
-            ]
-        ]
+
+        # model finetuning
+        _, changes = finetune(
+            pending_changes, 
+            tags_per_user_df, 
+            model, optimizer, 
+            x_0,
+            clickData
+        )
 
     if n_clicks_preview > preview_counter:
-        if not current_change:
+        if not changes:
             changes_text = "No changes to show."
         else:
             changes_text = "\n".join([f"Edited cell: ({tag}, {userid}), old value: {old_val}, new value: {new_val}" 
-                                      for tag, userid, old_val, new_val in current_change])
+                                      for tag, userid, old_val, new_val in changes])
         return True, html.Pre(changes_text),  n_clicks_preview, close_preview_counter
     if n_clicks_close > close_preview_counter:
         return False, "", preview_counter, n_clicks_close
