@@ -52,15 +52,17 @@ def tag_cooccurrence(tag_df):
     return tag_df
 
 
-def normalize_df(tags_per_user):
-    for user in tags_per_user:
-        total = sum(tags_per_user[user].values())
-        for tag in tags_per_user[user]:
-            if total == 0:
-                tags_per_user[user][tag] = 0
-            else:
-                tags_per_user[user][tag] /= total
-    return tags_per_user
+def normalize_df(df):
+    # Iterate over each user (row) in the DataFrame
+    df = df.astype(float)
+    for user in df.index:
+        total = df.loc[user].sum()
+        if total != 0:
+            df.loc[user] = df.loc[user] / total
+        else:
+            df.loc[user] = 0
+    return df
+
 
 
 def tags_per_user(tag_df, q_df, a_df):
@@ -105,7 +107,7 @@ def tags_per_user(tag_df, q_df, a_df):
     return pd.DataFrame(tags_per_user).T 
 
 
-def create_heatmap(matrix, title, xaxis, yaxis, colourscale='Blues'):
+def create_heatmap(matrix, title, xaxis, yaxis, colourscale='Blues', zmid=None):
     # Create the heatmap
     heatmap = go.Heatmap(
         x=matrix.columns,
@@ -116,6 +118,9 @@ def create_heatmap(matrix, title, xaxis, yaxis, colourscale='Blues'):
     # heatmap.colorscale = 'RdYlGn'
     # change colour scale to white to blue
     heatmap.colorscale = colourscale
+
+    if zmid is not None:
+        heatmap.zmid = zmid
 
     # Create the layout
     layout = go.Layout(
