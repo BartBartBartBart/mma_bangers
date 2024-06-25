@@ -18,8 +18,3 @@ def create_help_popup():
         id="help-popup",
         is_open=False,
     )
-
-def edit_popup():
-    return dbc.Modal(
-        dbc.ModalHeader(dbc.ModalTitle("Click on a cell to edit"))
-    )

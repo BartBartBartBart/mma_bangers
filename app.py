@@ -6,6 +6,7 @@ import dash
 from dash import dcc, html,Input, Output, State
 import dash_bootstrap_components as dbc
 import widgets
+import callbacks
 import torch.nn as nn
 
 from data.preprocessing import create_tags, tags_per_user, create_heatmap, create_embedding_fig
@@ -181,7 +182,7 @@ app.layout = dbc.Container(
                                         dbc.Button("Implement Changes", id="implement-changes", n_clicks=0, color="primary", className="me-1 m-2"),
                                         dbc.Button("Preview Changes", id="preview-changes", n_clicks=0, color="primary", className="me-1 m-2"),
                                         dbc.Button('Deselect', id='deselect-button', n_clicks=0, color="primary", className="me-1 m-2"),
-                                        dbc.Button("Edit Backlog", id="edit-backlog", n_clicks=0, color="primary", className="me-1 m-2"),
+                                        dbc.Button("Show Manual Edits", id="edit-backlog", n_clicks=0, color="primary", className="me-1 m-2"),
                                         dbc.Button("Save Changes", id="save-changes", n_clicks=0, color="success", className="me-1 m-2"),
                                         dbc.Button('Help', id='help-button', color="primary", className="me-1 m-2"),
                                     ], direction="horizontal"),
@@ -203,7 +204,7 @@ app.layout = dbc.Container(
                                     ),
                                     dbc.Col(
                                         dbc.Container(
-                                            dcc.Graph(figure=tags_per_user_hm, id='tags-per-user', style={'height': '100%', 'width': '10%'}),
+                                            dcc.Graph(figure=tags_per_user_hm, responsive=True, id='tags-per-user', style={'height': '100vmin', 'width': '130vmin'}),
                                             fluid=True, className='heatmap', style={'overflow': 'auto'}
                                         ),
                                         width=8, className='heatmap-container'
@@ -218,7 +219,7 @@ app.layout = dbc.Container(
                                     [
                                         dbc.Col(
                                             [
-                                                html.Div("Choose two versions to compare"),
+                                                html.Div("Relative Difference between Versions"),
                                                 dbc.Container(
                                                     [
                                                         html.P('From:'),
@@ -247,7 +248,7 @@ app.layout = dbc.Container(
                                 ),
                                 dbc.Row(
                                     dbc.Container(
-                                        dcc.Graph(figure=temporal_hm, id='temporal-matrix'),
+                                        dcc.Graph(figure=temporal_hm, responsive=True, id='temporal-matrix', style={'height': '100vmin', 'width': '134vmin'}),
                                         fluid=True, className='heatmap-container', style={'maxHeight': '100%', 'maxWidth': '100%', 'overflow': 'auto'}
                                     ), 
                                 )
@@ -271,7 +272,7 @@ app.layout = dbc.Container(
                                                                     target="umap-tooltip",
                                                                     placement="top",
                                                                 ),
-                                                            ], id="edit-cell", className="text-muted"),
+                                                            ], id="umap-text", className="text-muted"),
                                                         dcc.Dropdown(
                                                             all_tags, 
                                                             id='umap-tag', 
