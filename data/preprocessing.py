@@ -1,11 +1,13 @@
 import pandas as pd
 import plotly.graph_objects as go
+import os
 
 
 def comb_tags_func(x):
     list_tags = x.values
     tag_comb = ' '.join(list_tags)
     return tag_comb
+
 
 # Tags per question id
 def create_tags(tags, q_df):
@@ -22,6 +24,7 @@ def create_tags(tags, q_df):
     q_df.dropna(inplace=True)
     q_df['tag'] = q_df['tag'].apply(lambda x : x.split())
     return q_df
+
 
 def tag_cooccurrence(tag_df):
     # get unique tags
@@ -131,3 +134,12 @@ def create_heatmap(matrix, title, xaxis, yaxis, colourscale='Blues', zmid=None):
     heatmap = go.Figure(data=[heatmap], layout=layout)
     
     return heatmap
+
+
+def get_tags_per_user(data_dir, nrows=2000):
+    a_df = pd.read_csv(os.path.join(data_dir, 'Answers.csv'), encoding='latin-1', nrows=nrows)
+    q_df = pd.read_csv(os.path.join(data_dir, 'Questions.csv'), encoding='latin-1', nrows=nrows)
+    tags = pd.read_csv(os.path.join(data_dir, 'Tags.csv'), encoding='latin-1', nrows=nrows)
+    tag_df = create_tags(tags, q_df)
+    tags_per_user_df = tags_per_user(tag_df, q_df, a_df)
+    return tags_per_user_df
