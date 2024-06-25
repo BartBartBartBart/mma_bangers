@@ -3,13 +3,13 @@ import pandas as pd
 import torch
 import wandb
 import dash
-from dash import Dash, dcc, html, dash_table, callback, Input, Output, State
+from dash import dcc, html,Input, Output, State
 import dash_bootstrap_components as dbc
-from data.preprocessing import create_tags, tags_per_user, create_heatmap, normalize_df
-from model.train import PostCountPredictor, train
-import plotly.graph_objects as go
 import widgets
-import callbacks
+import torch.nn as nn
+
+from data.preprocessing import create_tags, tags_per_user, create_heatmap, create_embedding_fig
+from model.train import PostCountPredictor, train, finetune
 from constants import ALLOWED_TYPES
 
 nrows = 2000
@@ -40,8 +40,6 @@ tags_per_user_hm = create_heatmap(
     yaxis='Users'
 )
 
-print("DONE REFRESHING")
-
 edited_cells = []
 
 # create temporal matrix initialised with zeros
@@ -54,9 +52,11 @@ temporal_hm = create_heatmap(
     colourscale=[[0, "red"], [0.5, "white"], [1, "green"]]
 )
 
+# Model training
 logging = False
 num_nodes = tags_per_user_df.shape[0]
 x_0 = torch.nn.Embedding(num_nodes, 32)
+
 target = torch.tensor(tags_per_user_df.to_numpy(), dtype=torch.float)
 incidence_1 = torch.zeros_like(target, dtype=torch.float)
 incidence_1[target >= 1] = 1.0
@@ -90,11 +90,17 @@ model, x_0 = train(
 if logging:
     wandb.finish()
 
+# create list of all tags
+all_tags = tags_per_user_df.columns
+# create UMAP of embeddings
+umap_fig = create_embedding_fig(x_0)
+
 # Initialize the app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, FONT_AWESOME])
 
 help_popup_widget = widgets.create_help_popup()
 
+print("DONE REFRESHING")
 
 # App layout
 app.layout = dbc.Container(
@@ -157,7 +163,6 @@ app.layout = dbc.Container(
                                                         placeholder="Input number",
                                                         debounce=True,
                                                         min = 0,
-                                                        # max = 1,
                                                         step=0.1
                                                     ),
                                                     
@@ -166,36 +171,6 @@ app.layout = dbc.Container(
                                         ),
                                     ], align="center", className="p-3"
                                 ),
-                                # dbc.Row(
-                                #     [
-                                #         dbc.Col(
-                                #             dbc.Stack(
-                                #                 [
-                                #                     html.Div(
-                                #                         [
-                                #                             "Link Prediction",
-                                #                             html.I(className="fas fa-question-circle fa-sm", id="tooltip-link-prediction", style={"cursor":"pointer", "textAlign": "center"}),
-                                #                             dbc.Tooltip(
-                                #                                 "Input number to preview changes",
-                                #                                 target="tooltip-link-prediction",
-                                #                                 placement="top",
-                                #                             ),
-                                #                         ], className="text-muted"
-                                #                     ),
-                                #                     dcc.Input(
-                                #                         id="preview-number",
-                                #                         type="number",
-                                #                         placeholder="Input number",
-                                #                         debounce=True,
-                                #                         min = 0,
-                                #                         # max = 1,
-                                #                         step=0.1
-                                #                     ),
-                                #                 ]
-                                #             )
-                                #         ), 
-                                #     ], align="center", className="p-3"
-                                # ),
                                 dcc.Store(id='preview-counter', data=0),
                                 dcc.Store(id='close-preview-counter', data=0),
                                 dcc.Store(id='implement-counter', data=0),
@@ -255,7 +230,6 @@ app.layout = dbc.Container(
                                                                 'display': 'block',
                                                             }
                                                         ),
-                                                        # html.P("versus"),
                                                         html.Label('To:'),
                                                         dcc.Dropdown(
                                                             ["Version 1"], 
@@ -273,13 +247,46 @@ app.layout = dbc.Container(
                                 ),
                                 dbc.Row(
                                     dbc.Container(
-                                            dcc.Graph(figure=temporal_hm, id='temporal-matrix'),
-                                            fluid=True, className='heatmap-container', style={'maxHeight': '100%', 'maxWidth': '100%', 'overflow': 'auto'}
-                                        ), 
+                                        dcc.Graph(figure=temporal_hm, id='temporal-matrix'),
+                                        fluid=True, className='heatmap-container', style={'maxHeight': '100%', 'maxWidth': '100%', 'overflow': 'auto'}
+                                    ), 
                                 )
                             ]
                         ),
-
+                        dbc.Container(
+                            [
+                                dbc.Row(
+                                    [
+                                        dbc.Col(
+                                            [
+                                                html.Div("UMAP of embeddings"),
+                                                dbc.Container(
+                                                    [
+                                                        html.Label('Select Tag:'),
+                                                        dcc.Dropdown(
+                                                            all_tags, 
+                                                            id='umap-tag', 
+                                                            style={
+                                                                'width': '50%',
+                                                                'display': 'block',
+                                                            }
+                                                        ),
+                                                    ], 
+                                                    className='umap-dropdown',
+                                                ),
+                                            ],
+                                            className="temporal-toolbar"
+                                        ),
+                                    ]
+                                ),
+                                dbc.Row(
+                                    dbc.Container(
+                                        dcc.Graph(figure=umap_fig, id='umap-figure'),
+                                        fluid=True, className='umap-container', style={'maxHeight': '100%', 'maxWidth': '100%', 'overflow': 'auto'}
+                                    ), 
+                                ),
+                            ]
+                        ),
                     ], 
                     
                 ),
@@ -301,6 +308,7 @@ app.layout = dbc.Container(
     ], 
     fluid=True, className='top-level-container'
 )
+
 
 @app.callback(
     Output('show-question', 'children'),
@@ -339,6 +347,7 @@ def show_sample_question(clickData, q_df=q_df, a_df=a_df):
     Output('tags-per-user', 'figure', allow_duplicate=True),
     Output('implement-counter', 'data'),
     Output('tags-per-user', 'clickData'),
+    Output('umap-figure', 'figure', allow_duplicate=True),
     Input('tags-per-user', 'clickData'),
     Input("deselect-button", "n_clicks"),
     Input("implement-changes", "n_clicks"),
@@ -346,7 +355,7 @@ def show_sample_question(clickData, q_df=q_df, a_df=a_df):
     State("input-number", "value"),
     prevent_initial_call=True
 )
-def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, input_number):    
+def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, input_number, model=model, x_0=x_0, umap_fig=umap_fig):    
     global pending_changes, edited_cells
 
     ctx = dash.callback_context
@@ -377,7 +386,8 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
             '',
             tags_per_user_hm,
             implement_clicks,
-            None
+            None,
+            umap_fig
         ]
     
     if clickData is None:
@@ -392,7 +402,8 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
             '',
             tags_per_user_hm,
             implement_clicks,
-            clickData
+            clickData,
+            umap_fig
         ]
     current_val = pending_changes[0].loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
 
@@ -413,35 +424,24 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
         tag_idx = list(pending_changes[0].columns).index(tag)
 
         # model finetuning
-        logging = False
-        target = torch.tensor(pending_changes[0].to_numpy(), dtype=torch.float)
-        finetune_idx = torch.tensor([user_idx, tag_idx])
-        incidence_1 = torch.zeros_like(target, dtype=torch.float)
-        incidence_1[target >= 0.5] = 1.0
-
-
-        model, x_0 = train(
-            model=model,
-            optimizer=optimizer,
-            criterion=torch.nn.MSELoss(),
-            epochs=50,
-            x_0=x_0,
-            incidence_1=incidence_1,
-            target=target,
-            finetune_idx=finetune_idx,
+        predicted_df, _, x_0 = finetune(
+            pending_changes, 
+            tags_per_user_df, 
+            model, optimizer, 
+            x_0,
+            clickData
         )
 
-        # model prediction
-        model.eval()
-        x_0.eval()
-        predicted_tags_per_user = model(x_0.weight, incidence_1)
-        pending_changes[0] = pd.DataFrame(predicted_tags_per_user.detach().numpy(), index=tags_per_user_df.index, columns=tags_per_user_df.columns)
+        pending_changes[0] = predicted_df
 
+        # update umap
+        umap_fig = create_embedding_fig(x_0)
+        
         # track edited cells
         edited_cells.append((clickData['points'][0]['x'], clickData['points'][0]['y'], current_val, input_number))
 
         tags_per_user_hm = create_heatmap(
-            pending_changes[0], # latest normalized df
+            predicted_df, # latest normalized df
             title='Tags per user',
             xaxis='Tags',
             yaxis='Users'
@@ -454,10 +454,10 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
             '',
             tags_per_user_hm,
             implement_counter,
-            clickData
+            clickData,
+            umap_fig
         ]
     else: 
-        # if input_number is None or input_number == '':
         tags_per_user_hm = create_heatmap(
             pending_changes[0], # latest df
             title='Tags per user',
@@ -469,11 +469,9 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
             input_number, 
             tags_per_user_hm,
             implement_clicks,
-            clickData
+            clickData,
+            umap_fig
         ]
-    
-    # # update heatmap with new value
-    # tags_per_user_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']] = input_number
     
 
 @app.callback(
@@ -499,8 +497,8 @@ def update_heatmap(version):
     return [
         tags_per_user_hm,
         f"Current version: Version {version_index + 1}",
-        # temporal_heatmap
     ]
+
 
 @app.callback(
     Output('temporal-matrix', 'figure'),
@@ -537,6 +535,7 @@ def compare_versions(version1, version2):
     
     return diff_heatmap
 
+
 @app.callback(
     Output("preview-modal", "is_open"),
     Output("preview-content", "children"),
@@ -545,13 +544,12 @@ def compare_versions(version1, version2):
     Input("preview-changes", "n_clicks"),
     Input("close-preview", "n_clicks"),
     Input('tags-per-user', 'clickData'),
-    # Input("preview-number", "value"),
     Input("preview-counter", "data"),
     Input("close-preview-counter", "data"),
     State("input-number", "value"),
     prevent_initial_call=True
 )
-def preview_changes(n_clicks_preview, n_clicks_close, clickData, preview_counter, close_preview_counter, preview_number):
+def preview_changes(n_clicks_preview, n_clicks_close, clickData, preview_counter, close_preview_counter, preview_number, model=model, x_0=x_0):
     # TODO: add fintuning
     # global edited_cells
 
@@ -561,21 +559,22 @@ def preview_changes(n_clicks_preview, n_clicks_close, clickData, preview_counter
         current_val = preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
         preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']] = preview_number
         new_val = preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']]
-        current_change = [
-            [
-                clickData['points'][0]['x'], 
-                clickData['points'][0]['y'], 
-                current_val,
-                new_val
-            ]
-        ]
+
+        # model finetuning
+        _, changes = finetune(
+            pending_changes, 
+            tags_per_user_df, 
+            model, optimizer, 
+            x_0,
+            clickData
+        )
 
     if n_clicks_preview > preview_counter:
-        if not current_change:
+        if not changes:
             changes_text = "No changes to show."
         else:
             changes_text = "\n".join([f"Edited cell: ({tag}, {userid}), old value: {old_val}, new value: {new_val}" 
-                                      for tag, userid, old_val, new_val in current_change])
+                                      for tag, userid, old_val, new_val in changes])
         return True, html.Pre(changes_text),  n_clicks_preview, close_preview_counter
     if n_clicks_close > close_preview_counter:
         return False, "", preview_counter, n_clicks_close
@@ -602,6 +601,7 @@ def save_changes(n_clicks):
         return options, current_version, options, options
     raise dash.exceptions.PreventUpdate
 
+
 @app.callback(
     Output("preview-modal", "is_open", allow_duplicate=True),
     Output("preview-content", "children", allow_duplicate=True),
@@ -623,6 +623,41 @@ def edit_backlog(n_clicks_preview, n_clicks_close, is_open):
     if n_clicks_close > 0:
         return not is_open, ""
     raise dash.exceptions.PreventUpdate
+
+
+@app.callback(
+    Output('umap-figure', 'figure', allow_duplicate=True),
+    Input('umap-tag', 'value'),
+    prevent_initial_call=True
+)
+def highlight_tag(tag, all_tags=all_tags, x_0=x_0, pending_changes=pending_changes):
+    if tag not in all_tags:
+        return dash.no_update
+    
+    # embeddings are ordered the same as the users in pending_changes[0]
+    # so get index of users in pending_changes[0] that have the selected tag
+    tag_idx = []
+    for idx, user in enumerate(pending_changes[0].index):
+        if pending_changes[0].loc[user, tag] > 0:
+            tag_idx.append(idx)
+
+    # highlight with red the embeddings of users with the selected tag
+    umap_fig = create_embedding_fig(x_0, highlight_idx=tag_idx)
+    return umap_fig
+
+
+# @app.callback(
+#     Output('umap-figure', 'figure', allow_duplicate=True),
+#     Input('implement-changes', 'n_clicks'),
+#     Input('implement-counter', 'data'),
+#     prevent_initial_call=True
+# )
+# def update_umap(implement_button_clicks, implement_counter, x_0=x_0):
+#     if implement_button_clicks > implement_counter:
+#         umap_fig = create_embedding_fig(x_0)
+#         return umap_fig
+#     raise dash.exceptions.PreventUpdate
+
 
 if __name__ == '__main__':
     app.run(debug=True)
