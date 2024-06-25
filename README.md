@@ -7,6 +7,12 @@ To develop on your machine, here are some tips.
 First, please download the data from [here](https://www.kaggle.com/datasets/stackoverflow/stacksample).
 Put it in a directory `data` in the repository.
 
+Initialize the challenge-icml-2024 submodule
+
+```bash
+git submodule update --init --recursive
+```
+
 create the conda environment and activate it:
    ```bash
    conda env create -f environment.yaml
