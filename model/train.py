@@ -59,6 +59,56 @@ def train(model, optimizer, criterion, epochs, x_0, incidence_1, target, finetun
     return model, torch.nn.Embedding.from_pretrained(x_0.weight)
 
 
+def finetune(pending_changes, tags_per_user_df, model, optimizer, x_0, clickData):
+    # Finetuning
+    # Map the User ID and Tag to Integer Indices
+    user_id = clickData['points'][0]['y']  # This is the specific user ID
+    user_idx = list(pending_changes[0].index).index(user_id)
+
+    # Find the integer index for the tag
+    tag = clickData['points'][0]['x']  # This is the tag (string)
+    tag_idx = list(pending_changes[0].columns).index(tag)
+    
+    # model finetuning
+    logging = False
+    target = torch.tensor(pending_changes[0].to_numpy(), dtype=torch.float)
+    finetune_idx = torch.tensor([user_idx, tag_idx])
+    incidence_1 = torch.zeros_like(target, dtype=torch.float)
+    incidence_1[target >= 0.5] = 1.0
+
+
+    model, x_0 = train(
+        model=model,
+        optimizer=optimizer,
+        criterion=torch.nn.MSELoss(),
+        epochs=50,
+        x_0=x_0,
+        incidence_1=incidence_1,
+        target=target,
+        finetune_idx=finetune_idx,
+    )
+
+    # model prediction
+    model.eval()
+    x_0.eval()
+    predicted_tags_per_user = model(x_0.weight, incidence_1)
+    predicted_df = pd.DataFrame(predicted_tags_per_user.detach().numpy(), index=tags_per_user_df.index, columns=tags_per_user_df.columns)
+
+    # cap negative values to 0
+    predicted_df[predicted_df < 0] = 0
+
+    # Create list of changes to be made
+    changes = []
+    for user_id in pending_changes[0].index:
+        for tag in pending_changes[0].columns:
+            current_value = pending_changes[0].loc[user_id, tag]
+            predicted_value = predicted_df.loc[user_id, tag]
+            if current_value != predicted_value:
+                changes.append([user_id, tag, current_value, predicted_value])
+
+    return predicted_df, changes, x_0
+
+
 if __name__ == "__main__":
     # TODO Train model and save trainable params in node_embeddings.pt and mlp_params.pt files
     tags_per_user_df = get_tags_per_user(data_dir="./data")
