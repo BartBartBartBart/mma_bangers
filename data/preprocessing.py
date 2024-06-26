@@ -146,6 +146,7 @@ def create_embedding_fig(embeddings, highlight_idx=[]):
         else:
             umap_fig.add_trace(go.Scatter(x=[umap_embeddings[user_idx,0]], y=[umap_embeddings[user_idx,1],], mode='markers', marker=dict(size=7, color='blue')))
     umap_fig.update_layout(title='UMAP of embeddings', xaxis_title='UMAP 1', yaxis_title='UMAP 2')
+    umap_fig.update_layout(showlegend=False)
     return umap_fig
 
 def get_tags_per_user(data_dir, nrows=2000):
