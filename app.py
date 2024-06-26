@@ -284,7 +284,7 @@ app.layout = dbc.Container(
                                                         ),
                                                     ],
                                                 ),
-                                                html.P("S", id='umap-tag-selected')
+                                                html.P("Select a tag to highlight corresponding embeddings in red.", id='umap-tag-selected')
                                             ],
                                             className="temporal-toolbar"
                                         ),
@@ -368,8 +368,6 @@ def show_sample_question(clickData, q_df=q_df, a_df=a_df):
 )
 def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, input_number, umap_fig=umap_fig):    
     global pending_changes, edited_cells, model, x_0, tags_per_user_df, umap_embeddings
-
-    print(f"implement clicks: {implement_clicks}, implement counter: {implement_counter}")
 
     ctx = dash.callback_context
     if not ctx.triggered:
