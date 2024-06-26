@@ -77,10 +77,15 @@ def tags_per_user(tag_df, q_df, a_df):
     # Create a dictionary of tags per user
     tags_per_user = {}
     for user in a_df['OwnerUserId'].unique():
+        # remove '.0' from the end of the user id
+        user = str(user).split('.')[0]
+        print(user)
         # if str(user) != 'nan':
         tags_per_user[str(user)] = {tag: 0 for tag in all_tags}
     # also add question users:
     for user in q_df['OwnerUserId'].unique():
+        user = str(user).split('.')[0]
+        print(user)
         # if str(user) != 'nan':
         tags_per_user[str(user)] = {tag: 0 for tag in all_tags}
     
@@ -89,12 +94,15 @@ def tags_per_user(tag_df, q_df, a_df):
         tags = row['tag']
         users = a_df[a_df['ParentId'] == question_id]['OwnerUserId']
         users = users.dropna().values
+        # remove '.0' from the end of the user id
+        users = [str(user).split('.')[0] for user in users]
         for user in users:
             for tag in tags:
                 # if str(user) != 'nan':
                 tags_per_user[str(user)][tag] += 1
         # Also add the user that asked the question
         user = q_df[q_df['Id'] == question_id]['OwnerUserId'].values[0]
+        user = str(user).split('.')[0]
         # if str(user) != 'nan':
         for tag in tags:
             tags_per_user[str(user)][tag] += 1
@@ -136,18 +144,24 @@ def create_heatmap(matrix, title, xaxis, yaxis, colourscale='Blues', zmid=None):
     
     return heatmap
 
-def create_embedding_fig(embeddings, highlight_idx=[]):
-    reducer = umap.UMAP()
-    umap_embeddings = reducer.fit_transform(embeddings.weight.data.numpy())
+def create_embedding_fig(embeddings, highlight_idx=[], fit_transform=True):
+    if fit_transform:
+        reducer = umap.UMAP()
+        umap_embeddings = reducer.fit_transform(embeddings.weight.data.numpy())
+    else:
+        umap_embeddings = embeddings
     umap_fig = go.Figure()
+    blue_opacity = 1
+    if len(highlight_idx) > 0:
+        blue_opacity = 0.2
     for user_idx in range(umap_embeddings.shape[0]):
         if user_idx in highlight_idx:
             umap_fig.add_trace(go.Scatter(x=[umap_embeddings[user_idx,0]], y=[umap_embeddings[user_idx,1],], mode='markers', marker=dict(size=7, color='red')))
         else:
-            umap_fig.add_trace(go.Scatter(x=[umap_embeddings[user_idx,0]], y=[umap_embeddings[user_idx,1],], mode='markers', marker=dict(size=7, color='blue')))
+            umap_fig.add_trace(go.Scatter(x=[umap_embeddings[user_idx,0]], y=[umap_embeddings[user_idx,1],], mode='markers', marker=dict(size=7, color='blue', opacity=blue_opacity)))
     umap_fig.update_layout(title='UMAP of embeddings', xaxis_title='UMAP 1', yaxis_title='UMAP 2')
     umap_fig.update_layout(showlegend=False)
-    return umap_fig
+    return umap_fig, umap_embeddings
 
 def get_tags_per_user(data_dir, nrows=2000):
     a_df = pd.read_csv(os.path.join(data_dir, 'Answers.csv'), encoding='latin-1', nrows=nrows)

@@ -94,7 +94,7 @@ if logging:
 # create list of all tags
 all_tags = tags_per_user_df.columns
 # create UMAP of embeddings
-umap_fig = create_embedding_fig(x_0)
+umap_fig, umap_embeddings = create_embedding_fig(x_0)
 
 # Initialize the app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, FONT_AWESOME])
@@ -102,6 +102,7 @@ app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, FONT_AWESO
 help_popup_widget = widgets.create_help_popup()
 
 print("DONE REFRESHING")
+
 
 # App layout
 app.layout = dbc.Container(
@@ -283,6 +284,7 @@ app.layout = dbc.Container(
                                                         ),
                                                     ],
                                                 ),
+                                                html.P("S", id='umap-tag-selected')
                                             ],
                                             className="temporal-toolbar"
                                         ),
@@ -364,8 +366,10 @@ def show_sample_question(clickData, q_df=q_df, a_df=a_df):
     State("input-number", "value"),
     prevent_initial_call=True
 )
-def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, input_number, model=model, x_0=x_0, umap_fig=umap_fig):    
-    global pending_changes, edited_cells
+def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, input_number, umap_fig=umap_fig):    
+    global pending_changes, edited_cells, model, x_0, tags_per_user_df, umap_embeddings
+
+    print(f"implement clicks: {implement_clicks}, implement counter: {implement_counter}")
 
     ctx = dash.callback_context
     if not ctx.triggered:
@@ -433,7 +437,7 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
         tag_idx = list(pending_changes[0].columns).index(tag)
 
         # model finetuning
-        predicted_df, _, x_0 = finetune(
+        predicted_df, _, x_0, model = finetune(
             pending_changes, 
             tags_per_user_df, 
             model, optimizer, 
@@ -444,7 +448,7 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
         pending_changes[0] = predicted_df
 
         # update umap
-        umap_fig = create_embedding_fig(x_0)
+        umap_fig, umap_embeddings = create_embedding_fig(x_0)
         
         # track edited cells
         edited_cells.append((clickData['points'][0]['x'], clickData['points'][0]['y'], current_val, input_number))
@@ -490,6 +494,8 @@ def edit_cell(clickData, deselect_clicks, implement_clicks, implement_counter, i
     prevent_initial_call=True
 )
 def update_heatmap(version):
+    global heatmap_versions, pending_changes
+
     if version is None:
         version_index = len(heatmap_versions) - 1
     else:
@@ -502,6 +508,7 @@ def update_heatmap(version):
         xaxis='Tags',
         yaxis='Users'
     )
+    pending_changes[0] = selected_df.copy()
     
     return [
         tags_per_user_hm,
@@ -516,6 +523,8 @@ def update_heatmap(version):
     prevent_initial_call=True
 )
 def compare_versions(version1, version2):
+    global heatmap_versions
+
     if version1 is None:
         version1_index = len(heatmap_versions) - 1
     else:
@@ -558,9 +567,9 @@ def compare_versions(version1, version2):
     State("input-number", "value"),
     prevent_initial_call=True
 )
-def preview_changes(n_clicks_preview, n_clicks_close, clickData, preview_counter, close_preview_counter, preview_number, model=model, x_0=x_0):
+def preview_changes(n_clicks_preview, n_clicks_close, clickData, preview_counter, close_preview_counter, preview_number):
     # TODO: add fintuning
-    # global edited_cells
+    global model, x_0, pending_changes, tags_per_user_df
 
     changes = []
     if clickData is not None and preview_number is not None and n_clicks_preview > preview_counter:
@@ -568,7 +577,7 @@ def preview_changes(n_clicks_preview, n_clicks_close, clickData, preview_counter
         preview_df.loc[clickData['points'][0]['y'], clickData['points'][0]['x']] = preview_number
 
         # model finetuning
-        _, changes, _ = finetune(
+        _, changes, x_0, model = finetune(
             pending_changes, 
             tags_per_user_df, 
             model, optimizer, 
@@ -634,10 +643,13 @@ def edit_backlog(n_clicks_preview, n_clicks_close, is_open):
 
 @app.callback(
     Output('umap-figure', 'figure', allow_duplicate=True),
+    Output('umap-tag-selected', 'children'),
     Input('umap-tag', 'value'),
     prevent_initial_call=True
 )
-def highlight_tag(tag, all_tags=all_tags, x_0=x_0, pending_changes=pending_changes):
+def highlight_tag(tag):
+    global all_tags, pending_changes, umap_embeddings
+
     if tag not in all_tags:
         return dash.no_update
     
@@ -649,21 +661,10 @@ def highlight_tag(tag, all_tags=all_tags, x_0=x_0, pending_changes=pending_chang
             tag_idx.append(idx)
 
     # highlight with red the embeddings of users with the selected tag
-    umap_fig = create_embedding_fig(x_0, highlight_idx=tag_idx)
-    return umap_fig
-
-
-# @app.callback(
-#     Output('umap-figure', 'figure', allow_duplicate=True),
-#     Input('implement-changes', 'n_clicks'),
-#     Input('implement-counter', 'data'),
-#     prevent_initial_call=True
-# )
-# def update_umap(implement_button_clicks, implement_counter, x_0=x_0):
-#     if implement_button_clicks > implement_counter:
-#         umap_fig = create_embedding_fig(x_0)
-#         return umap_fig
-#     raise dash.exceptions.PreventUpdate
+    umap_fig, umap_embeddings = create_embedding_fig(umap_embeddings, highlight_idx=tag_idx, fit_transform=False)
+    if len(tag_idx) == 0:
+        return umap_fig, f"No users have the tag {tag}"
+    return umap_fig, f"Highlighted users with tag {tag}"
 
 
 if __name__ == '__main__':
