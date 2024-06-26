@@ -4,6 +4,18 @@ from tqdm import tqdm
 import pandas as pd
 from data.preprocessing import get_tags_per_user
 import wandb
+import random
+import numpy as np
+
+def set_seed(seed_value=42):
+    """Set seed for reproducibility."""
+    random.seed(seed_value)
+    np.random.seed(seed_value)
+    torch.manual_seed(seed_value)
+    torch.cuda.manual_seed(seed_value)
+    torch.cuda.manual_seed_all(seed_value)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 def indcidence_from_counts(counts):
@@ -38,6 +50,8 @@ class PostCountPredictor(torch.nn.Module):
         
 
 def train(model, optimizer, criterion, epochs, x_0, incidence_1, target, finetune_idx=None, logging=False):
+    set_seed(42)
+
     model.train()
     x_0.train()
     for epoch in tqdm(range(epochs)):
@@ -56,6 +70,8 @@ def train(model, optimizer, criterion, epochs, x_0, incidence_1, target, finetun
             # graph loss
             wandb.log({"epoch": epoch + 1, "loss": loss.item()})
 
+    model.eval()
+    x_0.eval()
     return model, torch.nn.Embedding.from_pretrained(x_0.weight)
 
 
