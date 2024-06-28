@@ -293,7 +293,8 @@ app.layout = dbc.Container(
                                 dbc.Row(
                                     dbc.Container(
                                         dcc.Graph(figure=umap_fig, id='umap-figure'),
-                                        fluid=True, className='umap-container', style={'maxHeight': '100%', 'maxWidth': '100%', 'overflow': 'auto'}
+                                        fluid=True, className='umap-container',
+                                        # style={'maxHeight': '100%', 'maxWidth': '100%', 'overflow': 'auto'}
                                     ), 
                                 ),
                             ]

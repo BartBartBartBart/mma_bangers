@@ -79,13 +79,11 @@ def tags_per_user(tag_df, q_df, a_df):
     for user in a_df['OwnerUserId'].unique():
         # remove '.0' from the end of the user id
         user = str(user).split('.')[0]
-        print(user)
         # if str(user) != 'nan':
         tags_per_user[str(user)] = {tag: 0 for tag in all_tags}
     # also add question users:
     for user in q_df['OwnerUserId'].unique():
         user = str(user).split('.')[0]
-        print(user)
         # if str(user) != 'nan':
         tags_per_user[str(user)] = {tag: 0 for tag in all_tags}
     
@@ -161,6 +159,17 @@ def create_embedding_fig(embeddings, highlight_idx=[], fit_transform=True):
             umap_fig.add_trace(go.Scatter(x=[umap_embeddings[user_idx,0]], y=[umap_embeddings[user_idx,1],], mode='markers', marker=dict(size=7, color='blue', opacity=blue_opacity)))
     umap_fig.update_layout(title='UMAP of embeddings', xaxis_title='UMAP 1', yaxis_title='UMAP 2')
     umap_fig.update_layout(showlegend=False)
+
+    # make the fig square
+    umap_fig.update_layout(
+        autosize=False,
+        width=800,
+        height=800,
+    )
+
+    # make the axes equal
+    umap_fig.update_xaxes(scaleanchor="y", scaleratio=1)
+    # umap_fig.update_yaxes(scaleanchor="x", scaleratio=1)
     return umap_fig, umap_embeddings
 
 def get_tags_per_user(data_dir, nrows=2000):
