@@ -2,10 +2,10 @@
 Repository for the Multimedia Analytics assignment.
 
 ## Basic Setup
-To develop on your machine, here are some tips.
+To develop on your machine, follow these steps.
 
 First, please download the data from [here](https://www.kaggle.com/datasets/stackoverflow/stacksample).
-Put it in a directory `data` in the repository.
+Put it in the directory `data` in the repository.
 
 Initialize the challenge-icml-2024 submodule
 
